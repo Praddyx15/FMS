@@ -1,0 +1,21 @@
+# Reference material — 19 GB of third-party repos and manuals; stays local.
+# Locations are indexed in Reference_Forensic_Report.md; nav DB path is
+# resolved at runtime (see main.cpp / FMS_ARINC_DB).
+Reference/
+
+# Build output
+Frontend QML_Qt/FMS_Qt/build/
+build/
+
+# Scratch / temp
+scratch/
+*.tmp
+*.log
+
+# IDE / tooling
+.vscode/
+.idea/
+*.user
+CMakeUserPresets.json
+compile_commands.json
+.qmlls.ini
