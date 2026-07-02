@@ -19,3 +19,6 @@ scratch/
 CMakeUserPresets.json
 compile_commands.json
 .qmlls.ini
+
+# Machine-local Claude Code settings
+.claude/settings.local.json
