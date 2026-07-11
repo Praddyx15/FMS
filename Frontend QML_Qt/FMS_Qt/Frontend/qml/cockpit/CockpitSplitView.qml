@@ -84,8 +84,8 @@ Item {
                     visible: root.rightContent === "mcdu"
                     Item {
                         id: mcduWrapper
-                        property real scaleFactor: Math.min(parent.width / 420, parent.height / 660)
-                        width: 420 * scaleFactor
+                        property real scaleFactor: Math.min(parent.width / 380, parent.height / 660)
+                        width: 380 * scaleFactor
                         height: 660 * scaleFactor
                         anchors.centerIn: parent
                         MCDU {

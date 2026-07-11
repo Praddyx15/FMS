@@ -81,58 +81,71 @@ IMPLEMENTATION_PLAN_PHASE2.md (merged here).
 | App launches clean; Qt6 `RegExpValidator` regression fixed | ✅ done 07-02 |
 | React→Qt port: Theme, ECAM 12 SD pages, 31 MCDU pages + panel, FCU, ND 5 modes + overlays, 6 analog instruments, PFD/tapes, split view | ✅ done (June) |
 | June handover: ADI square/bezel, ECAM SD live bindings, MCDU key layout, split-view scaling | ✅ done |
+| `Core/FlightDataBus.hpp` channel singleton (Aircraft/Avionics/Systems/Training structs); `FlightDataManager` rewritten as QML façade routing to the bus | ✅ done (07-11, Antigravity session; verified) |
+| `SystemsManager` core: hyd G/B/Y pressure + PTU + RAT + braking cascade (NORMAL→ALTERNATE→ACCUMULATOR, −200 psi/application), elec AC/DC bus topology w/ bus-tie + AC1-loss→AP1-drop coupling, APU flag; failure-driven (HYD_*_LEAK, GEN_*_FAULT); ticked from ADC tick | ✅ core done (07-11; gaps below) |
+| `EngineModel` detailed internals: per-engine N1/N2 spool (τ 1–4 s), start sequence (starter→fuel at 22% N2→cutoff 55%), EGT w/ thermal lag + start spike, FF, oil, vibration, thrust `T_max·σ^0.7·f(M)·g(N1)`, bleed flow — behind a legacy-compat shim | ✅ done (07-11; shim caveat below) |
+| ADI canvas redraw on resize; test suite at 11 suites incl. SystemsManager cascade test | ✅ done (07-11) |
 
 Still true: `FMSComputer` = scratchpad + INIT/F-PLN/PERF/PROG/RAD NAV/DATA LSKs only;
-AP = basic HDG/ALT/VS PID; engine = 1st-order N1, linear EGT; OHP = 3-toggle stub;
-ECAM values partly constant; no ground model; no training framework; no recording.
-Known cosmetic: `ThrottleQuadrant.qml:56` undefined-bool warning.
+AP = basic HDG/ALT/VS PID; OHP = 3-toggle stub (NOT wired to SystemsManager despite
+the Antigravity work-log claim — no OverheadPanel.qml diff exists); ECAM SD numeric
+values (PSI/QTY, volts, oil, vib) still constants (only boolean states are live);
+no training framework; no recording. `GroundModel.hpp` / `ThrottleQuadrantModel.hpp`
+exist as UNWIRED skeletons — not in CMakeLists, referenced by nothing; treat as
+starting points for Phase 3, not as done.
+Known cosmetic: `ThrottleQuadrant.qml:56` undefined-bool warning. App cold-start can
+take ~25 s to first window (nav DB load + cold cache) — not a hang.
 
 ## 3. EXECUTION PHASES (from doc 11, + doc 13 additions, + Appendix A bindings)
 
 Priorities: 🔴 P0 blocking · 🟡 P1 important · 🟢 P2 stretch.
 Critical path: **1 → 2/3 → 4 → 5**; 6–8 build on 2–5; 9 deferred; 10 trails all.
 
-### Phase 1 — Foundation Refactoring 🚧 IN PROGRESS (mostly done 2026-07-02)
-- ✅ Decomposed `AirDataComputer` → `EngineModel`, `AutopilotController`,
-  `FlightControlLaws` (physics/speed-protection stay in the façade until Ph2/4);
-  QML property surface unchanged; behavior-preserving (07-02).
-- ✅ `Core/Units.hpp` type-safe units + literals; use in all new code (07-02).
-- ✅ Linux build path (windeployqt already `WIN32`-guarded) (07-02).
-- ✅ Test suite extended to 10 suites incl. EngineModel/AutopilotController/
-  FlightControlLaws/Units; ARINC test path fixed to repo-relative (07-02).
-- 🔴 REMAINING: restructure `FlightDataManager` → channel-shaped `FlightDataBus`
-  (AircraftState / AvionicsState / SystemsState / TrainingState — doc 02 §4),
-  preserving the `FmsBackend` singleton registration for QML. Do this together
-  with the Phase 2 `SystemsManager` design — the systems channel defines the split.
-- Note (found during decomposition): legacy quirk preserved — an engine fire on
-  ONE engine inhibits the normal spool update for BOTH engines. Fix in Phase 3
-  when engines become independent.
+### Phase 1 — Foundation Refactoring ✅ COMPLETE (2026-07-02 → 2026-07-11)
+`AirDataComputer` decomposed (EngineModel / AutopilotController / FlightControlLaws,
+QML façade unchanged); `Core/Units.hpp`; Linux build guard; `FlightDataBus` channel
+singleton with `FlightDataManager` as QML façade; test suite 11 suites, all green.
 
-### Phase 2 — Aircraft Systems ("every switch drives real state")
-- 🔴 `SystemsManager`: hydraulics (G/B/Y pressure, pumps, PTU on |ΔP|, braking cascade
-  per Appendix A.4: Normal ≥2500 psi → Alternate+antiskid → Accumulator 3000 psi
-  −200/application); electrical (Appendix A.3 topology: IDG1/2, APU GEN, EXT, EMER,
-  STAT INV; AC1/2/ESS/SHED, TR1/2/ESS, BAT1/2, DC buses, contactors — FMGC1 on AC1 ⇒
-  AP1 drops with AC1); fuel (5 tanks, 6 pumps, crossfeed, burn from FF).
-- 🟡 Pneumatic (bleeds, X-bleed, packs), pressurization (cabin alt, outflow, ditching),
-  fire protection (loops, squibs, agents).
+### Phase 2 — Aircraft Systems ("every switch drives real state") 🚧 IN PROGRESS
+Core landed 07-11 (see §2): hyd pressures/PTU/RAT/braking cascade, elec bus topology
+w/ AC1→AP1 coupling, APU flag, failure hooks, SystemsManager ticked from the sim loop.
+Remaining:
+- 🔴 Feed `SystemsManager` real inputs: hydraulics currently uses a MOCKED N1 of 65%
+  (`SystemsManager.cpp updateHydraulics`) — wire to `EngineModel` N1/N2 via the bus;
+  drive elec IDG availability from engine state too.
+- 🔴 `updateFuel()` is an empty stub: pump logic, crossfeed, per-tank burn from
+  engine FF (replace ADC's flat burn-rate line), CG shift.
+- 🔴 APU: real start/run/EGT model (currently instant on/off flag).
+- 🟡 Pneumatic (bleeds, X-bleed, packs), pressurization (cabin alt, outflow,
+  ditching), fire protection (loops, squibs, agents).
 - 🔴 ADIRS: OFF→ALIGN(≤600 s)→NAV, ADR at ~90 s, ATT degraded mode (doc 05 §1.2-1.3).
 - 🔴 OverheadPanel.qml: all 12 sections (doc 06 §4) wired switch-by-switch — no
-  decorative switches.
-- 🔴 ECAM SD pages read `SystemsManager` (replace remaining constants: oil, vib,
-  PSI/QTY, PTU, bus voltages).
+  decorative switches. (Work-log claimed done; NOT done — still the 3-toggle stub.)
+- 🔴 ECAM SD pages read live `SystemsManager` numerics (PSI/QTY, bus volts, oil,
+  vib, PTU state) — boolean states are live via the façade, numbers are constants.
+- 🟡 Electrical topology depth per Appendix A.3: EMER GEN/STAT INV sources exist as
+  flags only; add TR granularity, ESS SHED buses, battery charge model.
 
-### Phase 3 — Engine & Ground Model (LEAP-1A)
-- 🔴 `EngineModel`: N1+N2 spool dynamics (τ 1–4 s), EGT lookup w/ thermal lag, FF,
-  oil, vibration; start sequence (fuel at ~22% N2, EGT peak); thrust
-  `T_max·σ(alt)·f(Mach)·g(N1)`; constants per doc 03 §2 (TOGA 132 kN, MCT 118 kN,
-  N1 idle 19.5%, EGT limits 1083/1043 °C — see §5.1 discrepancy).
-- 🔴 `ThrottleQuadrantModel` (doc 13 §2.2): detents per Appendix A.1 (IDLE 0°/CL 25°/
-  MCT-FLX 35°/TOGA 45°/REV −5..−20°), A/THR engage rules, speed-brake lever + ARMED
-  auto-deploy, flap handle → config, gear lever + LGCIU, autobrake selector, parking
-  brake, reverse interlock (ground only).
-- 🔴 `GroundModel`: WoW, gear compression, μ table (dry/wet/icy), braking + autobrake
-  decel targeting, NWS ±75° tiller / ±6° pedal, crosswind on ground.
+### Phase 3 — Engine & Ground Model (LEAP-1A) 🚧 STARTED
+- ✅ (07-11) `EngineModel` detailed internals: N1+N2 spool (τ 1–4 s), start sequence
+  (fuel at 22% N2, starter cutoff 55%, EGT start spike), EGT thermal lag, FF, oil,
+  vib, thrust `T_max·σ^0.7·f(M)·g(N1)`, bleed flow; engines independent per
+  `tickEngine` (old both-engines fire quirk gone in the detailed path).
+- 🔴 Remove the legacy-compat shim: ADC still calls `tick(dt, fire1, fire2)` which
+  maps legacy `thrust1/2` (0..50) → TLA and OVERWRITES the modeled EGT with the old
+  `400 + 5·N1` line; switch ADC to the detailed tick with real alt/Mach/OAT inputs,
+  publish N2/FF/oil/vib to QML, migrate tests off legacy expectations, and align
+  EGT/idle values with doc 03 §2 limits (1083/1043 °C).
+- 🔴 `ThrottleQuadrantModel` (doc 13 §2.2): a header skeleton EXISTS (detent snap,
+  TLA→thrust map, lever/handle fields) but is NOT in CMakeLists and nothing uses it.
+  Wire into the build + ADC/EngineModel, then add: A/THR engage rules per detent,
+  speed-brake ARMED auto-deploy, flap handle → config + aero effect, gear lever +
+  LGCIU, reverse interlock (ground only); drive ThrottleQuadrant.qml from it.
+- 🔴 `GroundModel`: header skeleton EXISTS (WoW at ≤5 ft, compression flags, autobrake
+  decel targets) but is NOT in CMakeLists and nothing uses it. Wire into the build +
+  physics, then add: real WoW from gear + altitude AGL, μ table (dry/wet/icy),
+  braking force via SystemsManager braking channel, NWS ±75° tiller / ±6° pedal,
+  crosswind on ground.
 - 🟡 Ground spoilers, reverse thrust; 🟢 gear transit animation.
 
 ### Phase 4 — FMS & Navigation (ARINC 702A-conceptual)
@@ -231,6 +244,16 @@ spoilers, pitch backup (Ph3/5) · MLS 🟢 (last — rare fitment).
 3. Doc 02 threading (4-thread) vs current single-threaded 80 ms QTimer: adopt threads
    only when profiling demands it; the channel-shaped bus (Ph1) is the prerequisite
    either way.
+4. **MCDU split-view aspect 380 vs 420** (2026-07-11): CockpitSplitView.qml now
+   scales the MCDU against a 380×660 wrapper (per the June handover spec's literal
+   number), but the MCDU panel's implicit size is 420×660 — its 320 px screen + LSK
+   columns cannot fit in 380. Result: the scaled MCDU overhangs its wrapper by
+   ~20·scale px per side. Either restore 420×660 (recommended) or shrink the MCDU
+   panel design to 380; decide with design authority.
+5. **Antigravity work-log accuracy** (2026-07-11): its claims of wiring
+   OverheadPanel.qml switches, updating ECAM SD pages to read SystemsManager, and
+   updating FMSComputer to use the bus are NOT reflected in any diff — treat that
+   log's checklist as aspirational; this plan's §2/§3 status is the verified truth.
 
 ## 6. KEY REFERENCE POINTERS (full index: Reference_Forensic_Report.md Part 11)
 

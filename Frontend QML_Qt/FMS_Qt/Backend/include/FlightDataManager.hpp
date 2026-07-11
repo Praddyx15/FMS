@@ -6,9 +6,10 @@
 #include <QRecursiveMutex>
 #include <QtQml/qqml.h>
 
+#include "Core/FlightDataBus.hpp"
+
 /**
- * FlightDataManager — Singleton holding all flight-plan data.
- * Exposed to QML as a singleton ("FlightDataManager 1.0").
+ * FlightDataManager — QML Singleton Façade routing to FlightDataBus.
  */
 class FlightDataManager : public QObject
 {
@@ -216,66 +217,4 @@ signals:
 private:
     static FlightDataManager *s_instance;
     void initDefaultWaypoints();
-
-    mutable QRecursiveMutex m_mutex;
-
-    // Flight Plan
-    QString m_departure     = "EDDF";
-    QString m_destination   = "LFPG";
-    QString m_alternate     = "EBBR";
-    QString m_flightNumber  = "LH1234";
-    QString m_callsign      = "DLH1234";
-    int     m_cruiseAltitude = 32000;
-    double  m_tripFuel      = 8500.0;
-    double  m_reserveFuel   = 2000.0;
-    double  m_alternateFuel = 800.0;
-    double  m_finalReserve  = 1500.0;
-    double  m_zeroFuelWeight = 58000.0;
-    double  m_blockFuel     = 12000.0;
-    int     m_passengers    = 150;
-    double  m_cargo         = 2000.0;
-    int     m_costIndex     = 35;
-
-    // Waypoints
-    QVariantList m_waypoints;
-
-    // Weather
-    double  m_windHeading   = 270.0;
-    double  m_windSpeed     = 10.0;
-    double  m_turbulence    = 2.0;
-
-    // Systems
-    bool    m_hydraulicGreen  = true;
-    bool    m_hydraulicYellow = true;
-    bool    m_hydraulicBlue   = true;
-    bool    m_gen1Active      = true;
-    bool    m_gen2Active      = true;
-    bool    m_apuActive       = false;
-    bool    m_apuMasterSw     = false;
-    bool    m_gnssActive      = true;
-    double  m_gnssDrift       = 0.0;
-    bool    m_adirs1Active    = true;
-    bool    m_adirs2Active    = true;
-    bool    m_adirs3Active    = true;
-    bool    m_pack1Active     = true;
-    bool    m_pack2Active     = true;
-    bool    m_wingAntiIce     = false;
-    bool    m_eng1AntiIce     = false;
-    bool    m_eng2AntiIce     = false;
-    // Fuel tanks (kg) — A320 standard loading: 800+5400+6200+5400+800 = 18600
-    int     m_fuelLOuter      = 800;
-    int     m_fuelLInner      = 5400;
-    int     m_fuelCentre      = 6200;
-    int     m_fuelRInner      = 5400;
-    int     m_fuelROuter      = 800;
-
-    // EFIS
-    int     m_ndRange    = 80;
-    QString m_ndMode     = "ARC";
-    bool    m_wxrOverlay  = false;
-    bool    m_terrOverlay = false;
-    bool    m_tcasOverlay = false;
-    bool    m_vorOverlay  = true;
-    bool    m_wptOverlay  = true;
-    double  m_qnh        = 1013.0;
 };

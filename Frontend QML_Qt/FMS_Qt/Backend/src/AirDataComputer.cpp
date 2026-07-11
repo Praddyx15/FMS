@@ -1,5 +1,6 @@
 #include "AirDataComputer.hpp"
 #include "FlightDataManager.hpp"
+#include "SystemsManager.hpp"
 #include <QtMath>
 #include <QDebug>
 #include <algorithm>
@@ -148,6 +149,7 @@ void AirDataComputer::onTick()
 void AirDataComputer::tick(double dt)
 {
     m_simTime += dt;
+    SystemsManager::instance()->tick(dt);
     updatePhysics(dt);
     updateSpeedProtection();
 

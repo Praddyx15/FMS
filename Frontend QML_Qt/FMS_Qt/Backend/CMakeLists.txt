@@ -6,6 +6,8 @@ add_library(FmsBackend STATIC
     src/EngineModel.cpp
     src/FlightControlLaws.cpp
     src/FlightDataManager.cpp
+    src/FlightDataBus.cpp
+    src/SystemsManager.cpp
     src/FMSComputer.cpp
     src/InstructorEngine.cpp
     src/ArincParser.cpp
@@ -14,7 +16,9 @@ add_library(FmsBackend STATIC
     include/EngineModel.hpp
     include/FlightControlLaws.hpp
     include/Core/Units.hpp
+    include/Core/FlightDataBus.hpp
     include/FlightDataManager.hpp
+    include/SystemsManager.hpp
     include/FMSComputer.hpp
     include/InstructorEngine.hpp
     include/ArincParser.hpp

@@ -11,6 +11,8 @@
 #include "FlightDataManager.hpp"
 #include "FMSComputer.hpp"
 #include "ArincParser.hpp"
+#include "SystemsManager.hpp"
+#include "Core/FlightDataBus.hpp"
 
 // A simple macro for reporting test results
 #define TEST_ASSERT(cond) \
@@ -280,6 +282,29 @@ void testFlightControlLaws()
     std::cout << "testFlightControlLaws passed!" << std::endl;
 }
 
+void testSystemsManager()
+{
+    std::cout << "Running testSystemsManager..." << std::endl;
+    auto *bus = DataBus::FlightDataBus::instance();
+    auto *sys = SystemsManager::instance();
+
+    // Verify default values
+    TEST_ASSERT(bus->systems().hyd.greenPressure == 3000.0);
+    TEST_ASSERT(sys->getBrakingChannel() == "NORMAL");
+
+    // Mock failure to test cascade / fallback
+    bus->training().activeFailures.failures.push_back("HYD_GREEN_LEAK");
+    
+    // Tick systems
+    sys->tick(0.1);
+    TEST_ASSERT(bus->systems().hyd.greenPressure < 2500.0);
+    
+    // Braking should fall back to Yellow (ALTERNATE)
+    TEST_ASSERT(sys->getBrakingChannel() == "ALTERNATE");
+
+    std::cout << "testSystemsManager passed!" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -294,6 +319,7 @@ int main(int argc, char *argv[])
     testEngineModel();
     testAutopilotController();
     testFlightControlLaws();
+    testSystemsManager();
     std::cout << "========== ALL TESTS PASSED SUCCESSFULLY ==========" << std::endl;
     return 0;
 }

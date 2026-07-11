@@ -14,6 +14,8 @@ Canvas {
 
     onPitchDegChanged: requestPaint()
     onRollDegChanged:  requestPaint()
+    onWidthChanged:    requestPaint()
+    onHeightChanged:   requestPaint()
 
     // Smooth 60Hz bindings
 
