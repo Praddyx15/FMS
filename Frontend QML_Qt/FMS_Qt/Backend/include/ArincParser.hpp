@@ -42,3 +42,4 @@ private:
     static QReadWriteLock s_lock;
     static bool s_isLoaded;
 };
+

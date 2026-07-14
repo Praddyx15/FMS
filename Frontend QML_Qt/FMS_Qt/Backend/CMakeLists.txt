@@ -11,6 +11,11 @@ add_library(FmsBackend STATIC
     src/FMSComputer.cpp
     src/InstructorEngine.cpp
     src/ArincParser.cpp
+    src/NavigationDatabase.cpp
+    src/FlightPlanManager.cpp
+    src/FMGCController.cpp
+    src/PerformanceEngine.cpp
+    src/PredictionEngine.cpp
     include/AirDataComputer.hpp
     include/AutopilotController.hpp
     include/EngineModel.hpp
@@ -22,6 +27,11 @@ add_library(FmsBackend STATIC
     include/FMSComputer.hpp
     include/InstructorEngine.hpp
     include/ArincParser.hpp
+    include/NavigationDatabase.hpp
+    include/FlightPlanManager.hpp
+    include/FMGCController.hpp
+    include/PerformanceEngine.hpp
+    include/PredictionEngine.hpp
 )
 
 target_include_directories(FmsBackend PUBLIC include)

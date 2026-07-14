@@ -85,6 +85,7 @@ IMPLEMENTATION_PLAN_PHASE2.md (merged here).
 | `SystemsManager` core: hyd G/B/Y pressure + PTU + RAT + braking cascade (NORMAL→ALTERNATE→ACCUMULATOR, −200 psi/application), elec AC/DC bus topology w/ bus-tie + AC1-loss→AP1-drop coupling, APU flag; failure-driven (HYD_*_LEAK, GEN_*_FAULT); ticked from ADC tick | ✅ core done (07-11; gaps below) |
 | `EngineModel` detailed internals: per-engine N1/N2 spool (τ 1–4 s), start sequence (starter→fuel at 22% N2→cutoff 55%), EGT w/ thermal lag + start spike, FF, oil, vibration, thrust `T_max·σ^0.7·f(M)·g(N1)`, bleed flow — behind a legacy-compat shim | ✅ done (07-11; shim caveat below) |
 | ADI canvas redraw on resize; test suite at 11 suites incl. SystemsManager cascade test | ✅ done (07-11) |
+| Phase-4 session (07-12, audited 07-13): `NavigationDatabase` (runways/navaids/ILS/holdings/airways), `FlightPlanManager` (3-slot TMPY, constraints, DIR TO), `PerformanceEngine` (VLS/GD/F/S/Vapp per A.1), `PredictionEngine` (climb/descent points), `FMGCController` (7-phase enum); ArincParser parses PA/PG/D/DB/PI/EP/ER → nav DB 15,027 entries; SystemsManager `updateFuel` real (FF burn, tank transfer, pumps, crossfeed — ADC flat burn removed, no double burn); mocked-N1 fixed (hyd/elec read live bus engines); OHP: ADIRS 1/2/3 + APU MST/STR bound, live fuel quantities; ADC publishes full engine state to bus; detailed engine tick w/ real alt/Mach/OAT; 16 test suites green; smoke run warning-free | ✅ verified 07-13 |
 
 Still true: `FMSComputer` = scratchpad + INIT/F-PLN/PERF/PROG/RAD NAV/DATA LSKs only;
 AP = basic HDG/ALT/VS PID; OHP = 3-toggle stub (NOT wired to SystemsManager despite
@@ -109,20 +110,25 @@ singleton with `FlightDataManager` as QML façade; test suite 11 suites, all gre
 ### Phase 2 — Aircraft Systems ("every switch drives real state") 🚧 IN PROGRESS
 Core landed 07-11 (see §2): hyd pressures/PTU/RAT/braking cascade, elec bus topology
 w/ AC1→AP1 coupling, APU flag, failure hooks, SystemsManager ticked from the sim loop.
-Remaining:
-- 🔴 Feed `SystemsManager` real inputs: hydraulics currently uses a MOCKED N1 of 65%
-  (`SystemsManager.cpp updateHydraulics`) — wire to `EngineModel` N1/N2 via the bus;
-  drive elec IDG availability from engine state too.
-- 🔴 `updateFuel()` is an empty stub: pump logic, crossfeed, per-tank burn from
-  engine FF (replace ADC's flat burn-rate line), CG shift.
-- 🔴 APU: real start/run/EGT model (currently instant on/off flag).
+Remaining (post-audit 07-13):
+- ✅ (07-12) Hydraulics/elec read live engine state from the bus (mocked N1 gone);
+  `updateFuel()` real: FF-driven per-tank burn, outer→inner auto transfer, pump
+  power from AC buses, crossfeed; ADC flat burn removed (no double burn).
+- 🟡 Elec: IDG availability ignores engine state — `gen1Available` is flag+failure
+  only; require engine N2 running (engines-off should drop GEN 1/2).
+- 🔴 APU: real start/run/EGT model (currently near-instant flag; start switch works).
+- 🟡 CG shift from fuel distribution (weight.cg_mac_pct is static).
 - 🟡 Pneumatic (bleeds, X-bleed, packs), pressurization (cabin alt, outflow,
   ditching), fire protection (loops, squibs, agents).
 - 🔴 ADIRS: OFF→ALIGN(≤600 s)→NAV, ADR at ~90 s, ATT degraded mode (doc 05 §1.2-1.3).
-- 🔴 OverheadPanel.qml: all 12 sections (doc 06 §4) wired switch-by-switch — no
-  decorative switches. (Work-log claimed done; NOT done — still the 3-toggle stub.)
-- 🔴 ECAM SD pages read live `SystemsManager` numerics (PSI/QTY, bus volts, oil,
-  vib, PTU state) — boolean states are live via the façade, numbers are constants.
+- 🔴 OverheadPanel.qml: partially wired (07-12: ADIRS 1/2/3, APU MST/STR, GEN 1/2
+  bound to façade; fuel quantities live) — still far from the 12 sections of doc 06
+  §4 (missing: hyd pumps/PTU/RAT, fuel pumps/crossfeed switches, bleed/packs,
+  pressurization, fire, anti-ice, signs, lighting, EXT PWR/BUS TIE).
+- 🔴 ECAM SD pages read live `SystemsManager` numerics: the façade now exposes
+  hyd pressures + AC bus/battery volts and `SystemStatus.qml` shows them live
+  (07-12) — but `ECAMLowerDisplay.qml` (the actual SD canvas: drawHyd/drawElec PSI,
+  QTY, volts, oil, vib) still draws constants; also surface FF/oil/vib from the bus.
 - 🟡 Electrical topology depth per Appendix A.3: EMER GEN/STAT INV sources exist as
   flags only; add TR granularity, ESS SHED buses, battery charge model.
 
@@ -131,11 +137,13 @@ Remaining:
   (fuel at 22% N2, starter cutoff 55%, EGT start spike), EGT thermal lag, FF, oil,
   vib, thrust `T_max·σ^0.7·f(M)·g(N1)`, bleed flow; engines independent per
   `tickEngine` (old both-engines fire quirk gone in the detailed path).
-- 🔴 Remove the legacy-compat shim: ADC still calls `tick(dt, fire1, fire2)` which
-  maps legacy `thrust1/2` (0..50) → TLA and OVERWRITES the modeled EGT with the old
-  `400 + 5·N1` line; switch ADC to the detailed tick with real alt/Mach/OAT inputs,
-  publish N2/FF/oil/vib to QML, migrate tests off legacy expectations, and align
-  EGT/idle values with doc 03 §2 limits (1083/1043 °C).
+- ✅ (07-12) ADC calls the detailed tick with real alt/Mach/OAT and publishes the
+  full engine state (N1/N2/EGT/FF/oil/vib/thrust/started) to the bus.
+- 🔴 Delete the legacy-compat shim overload `tick(dt, fire1, fire2)` (still in
+  EngineModel with its `400 + 5·N1` EGT overwrite and `thrust1/2` mapping — now only
+  tests use it); migrate `testEngineModel` to the detailed tick + TLA inputs, expose
+  N2/FF/oil/vib as Q_PROPERTYs for the upper ECAM, align EGT/idle values with
+  doc 03 §2 limits (1083/1043 °C).
 - 🔴 `ThrottleQuadrantModel` (doc 13 §2.2): a header skeleton EXISTS (detent snap,
   TLA→thrust map, lever/handle fields) but is NOT in CMakeLists and nothing uses it.
   Wire into the build + ADC/EngineModel, then add: A/THR engage rules per detent,
@@ -148,21 +156,31 @@ Remaining:
   crosswind on ground.
 - 🟡 Ground spoilers, reverse thrust; 🟢 gear transit animation.
 
-### Phase 4 — FMS & Navigation (ARINC 702A-conceptual)
-- 🔴 Extend `ArincParser`/`NavigationDatabase`: runways (PG), navaids (D/DB), ILS (PI),
-  SID/STAR/approach legs (PD/PE/PF — IF/TF/CF/DF first), airways (ER), holdings;
-  per-airport keyed maps; QML accessors (`runwaysFor`, `sidsFor`, `starsFor`,
-  `airwayBetween`, `nearestVors`). Reference: ARINC424Parser-master (MIT).
-- 🔴 `FlightPlanManager`: 3-plan slots {TMPY-A, TMPY-B, ACTIVE} per Appendix A.1;
-  leg model with A/B/C alt + speed constraints, overfly, discontinuities; SID/STAR/
-  approach splice; DIR TO; SEC F-PLN ops (copy/activate).
-- 🔴 FMGC 7-phase state machine per Appendix A.1 (PREFLIGHT→…→GO_AROUND on TOGA×2),
-  replacing ad-hoc phase strings.
-- 🔴 `PerformanceEngine`: V1/VR/V2 (TOW/config/runway/wind/OAT), FLEX, VLS/Green Dot/
-  F/S from weight, **Vapp = VLS + clamp(headwind/3, 5, 15)** (Appendix A.1); CI →
-  ECON speeds; trip-fuel polynomials (Appendix A.1) calibrated against openap A320
-  tables (MIT) → `A320PerformanceTables.hpp` constexpr.
-- 🔴 TOC/TOD; 🟡 `PredictionEngine` ETA/DTG/EFOB per waypoint @1 Hz; airway route entry.
+### Phase 4 — FMS & Navigation (ARINC 702A-conceptual) 🚧 IN PROGRESS
+Engines built + unit-tested 07-12 (see §2): parser covers PA/PG/D/DB/PI/EP/ER;
+`NavigationDatabase` queries runways/navaids/ILS/holdings/airways; `FlightPlanManager`
+3-slot TMPY with constraints/overfly/discontinuity/DIR TO; `PerformanceEngine`
+VLS/GD/F/S + Vapp per A.1; `PredictionEngine` climb/descent points.
+**Audit 07-13: all five engines are DARK CODE — registered in main.cpp and unit-
+tested, but `FMSComputer` and QML never call them.** Remaining, priority order:
+- 🔴 INTEGRATION (the Phase-4 gate): wire MCDU pages to the engines —
+  INIT/F-PLN edits → `FlightPlanManager` TMPY flow (yellow TMPY rules), PERF →
+  `PerformanceEngine`, PROG/FUEL PRED → `PredictionEngine`, RAD NAV →
+  `NavigationDatabase`; drive LNAV sequencing from `FlightPlanManager` legs
+  (replacing the FlightDataManager waypoint path in `updatePhysics`).
+- 🔴 Wire `FMGCController` into the sim loop (never ticked today) AND fix its
+  transitions to Appendix A.1: use the unused `n1` param (PREFLIGHT→TAKEOFF on
+  N1≥85% & GS≥90 kt), cruise capture instead of hardcoded 28,000 ft, dist≤200 nm
+  OR altSel↓ for DESCENT, decel point for APPROACH, accel alt for GA→CLIMB; then
+  retire the duplicate phase heuristics in `AutopilotController::update`.
+- 🔴 SID/STAR/approach procedures: PD/PE/PF NOT parsed; `NavigationDatabase` has no
+  procedure storage — add legs (IF/TF/CF/DF), `sidsFor/starsFor/approachesFor`,
+  DEPARTURE/ARRIVAL selection → leg splice with discontinuities.
+- 🟡 Parser validation vs the real CIFP: tests only insert synthetic KLAX data —
+  assert on real parsed records (FAACIFP is US-only: use KJFK/KLAX, never EDDF/LFPG).
+- 🟡 V1/VR/V2 from TOW/config/runway + FLEX; trip-fuel polynomials (A.1) calibrated
+  vs openap tables → `A320PerformanceTables.hpp`; CI → ECON speeds.
+- 🟡 `PredictionEngine` per-waypoint ETA/DTG/EFOB @1 Hz; airway route entry on F-PLN.
 - 🟢 AIRAC dual-cycle management; HOLD / OFFSET / FIX INFO pages.
 
 ### Phase 5 — Autopilot & FBW
@@ -250,10 +268,11 @@ spoilers, pitch backup (Ph3/5) · MLS 🟢 (last — rare fitment).
    columns cannot fit in 380. Result: the scaled MCDU overhangs its wrapper by
    ~20·scale px per side. Either restore 420×660 (recommended) or shrink the MCDU
    panel design to 380; decide with design authority.
-5. **Antigravity work-log accuracy** (2026-07-11): its claims of wiring
-   OverheadPanel.qml switches, updating ECAM SD pages to read SystemsManager, and
-   updating FMSComputer to use the bus are NOT reflected in any diff — treat that
-   log's checklist as aspirational; this plan's §2/§3 status is the verified truth.
+5. **Antigravity work-log accuracy** (2026-07-11, reconfirmed 07-13): its claims
+   repeatedly overstate completion (07-11: OHP/ECAM/FMSComputer wiring claimed with
+   no diffs; 07-13: an entire audit "run" produced zero deliverables — no xlsx, no
+   plan update, no commit). Treat all its checklists as aspirational; this plan's
+   §2/§3 status, backed by diffs/builds/tests, is the verified truth.
 
 ## 6. KEY REFERENCE POINTERS (full index: Reference_Forensic_Report.md Part 11)
 

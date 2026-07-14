@@ -60,6 +60,29 @@ namespace DataBus {
         double turbulence{2.0};
     };
 
+    struct EngineState {
+        double n1Left{0.0};
+        double n1Right{0.0};
+        double n2Left{0.0};
+        double n2Right{0.0};
+        double egtLeft{0.0};
+        double egtRight{0.0};
+        double ffLeft{0.0};
+        double ffRight{0.0};
+        double oilPressureLeft{0.0};
+        double oilPressureRight{0.0};
+        double oilTempLeft{0.0};
+        double oilTempRight{0.0};
+        double vibN1Left{0.0};
+        double vibN1Right{0.0};
+        double vibN2Left{0.0};
+        double vibN2Right{0.0};
+        double thrustN1{0.0};
+        double thrustN2{0.0};
+        bool started1{false};
+        bool started2{false};
+    };
+
     struct AircraftState {
         Position position;
         Velocity velocity;
@@ -68,7 +91,9 @@ namespace DataBus {
         AeroState aero;
         Weight weight;
         Atmosphere atmosphere;
+        EngineState engines;
     };
+
 
     struct AutopilotState {
         bool ap1Active{false};
@@ -160,9 +185,14 @@ namespace DataBus {
         FuelSystem fuel;
         bool apuActive{false};
         bool apuMasterSw{false};
+        bool apuStartSw{false};
+        double apuN{0.0};    // % RPM
+        double apuEgt{15.0};  // °C
         bool gnssActive{true};
         double gnssDrift{0.0};
         bool adirsActive[3]{true, true, true};
+        int adirsMode[3]{2, 2, 2}; // 0 = OFF, 1 = ALIGN, 2 = NAV, 3 = ATT
+        double adirsAlignTime[3]{0.0, 0.0, 0.0}; // seconds remaining to align
         bool packs[2]{true, true};
         bool antiIce[3]{false, false, false}; // wing, eng1, eng2
     };

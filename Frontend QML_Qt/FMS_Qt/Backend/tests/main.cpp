@@ -305,6 +305,128 @@ void testSystemsManager()
     std::cout << "testSystemsManager passed!" << std::endl;
 }
 
+#include "NavigationDatabase.hpp"
+#include "FlightPlanManager.hpp"
+#include "FMGCController.hpp"
+#include "PerformanceEngine.hpp"
+#include "PredictionEngine.hpp"
+
+void testNavigationDatabase()
+{
+    std::cout << "Running testNavigationDatabase..." << std::endl;
+    auto *db = NavigationDatabase::instance();
+    db->clear();
+
+    // Test runway insertion/query
+    RunwayInfo rwy;
+    rwy.identifier = "RW34L";
+    rwy.lengthFeet = 12000.0;
+    db->addRunway("KLAX", rwy);
+    auto rwys = db->getRunways("KLAX");
+    TEST_ASSERT(rwys.size() == 1);
+    TEST_ASSERT(rwys[0].identifier == "RW34L");
+
+    // Test navaid insertion/query
+    NavaidInfo nav;
+    nav.identifier = "LAX";
+    nav.name = "LOS ANGELES VOR";
+    nav.type = "VOR";
+    db->addNavaid("LAX", nav);
+    NavaidInfo res;
+    TEST_ASSERT(db->lookupNavaid("LAX", res));
+    TEST_ASSERT(res.name == "LOS ANGELES VOR");
+
+    // Test ILS insertion/query
+    ILSInfo ils;
+    ils.identifier = "I-LAX";
+    ils.runwayId = "RW24R";
+    db->addILS("KLAX", ils);
+    ILSInfo ilsRes;
+    TEST_ASSERT(db->lookupILS("KLAX", "RW24R", ilsRes));
+    TEST_ASSERT(ilsRes.identifier == "I-LAX");
+
+    std::cout << "testNavigationDatabase passed!" << std::endl;
+}
+
+void testFlightPlanManager()
+{
+    std::cout << "Running testFlightPlanManager..." << std::endl;
+    auto *fpm = FlightPlanManager::instance();
+    fpm->clear(FlightPlanManager::ACTIVE);
+    fpm->clear(FlightPlanManager::TEMPORARY_A);
+
+    // Insert waypoints in ACTIVE
+    fpm->insertWaypoint(FlightPlanManager::ACTIVE, 0, "KLAX", 33.94, -118.40);
+    fpm->insertWaypoint(FlightPlanManager::ACTIVE, 1, "KSFO", 37.62, -122.38);
+    TEST_ASSERT(fpm->getWaypointCount(FlightPlanManager::ACTIVE) == 2);
+    TEST_ASSERT(fpm->getWaypointName(FlightPlanManager::ACTIVE, 1) == "KSFO");
+
+    // Insert constraints
+    fpm->setAltitudeConstraint(FlightPlanManager::ACTIVE, 1, 10000.0, "ABOVE");
+    TEST_ASSERT(fpm->getWaypointAltitudeConstraint(FlightPlanManager::ACTIVE, 1) == 10000.0);
+    TEST_ASSERT(fpm->getWaypointAltitudeConstraintType(FlightPlanManager::ACTIVE, 1) == "ABOVE");
+
+    // Test temporary copy & commit
+    fpm->copyPlan(FlightPlanManager::ACTIVE, FlightPlanManager::TEMPORARY_A);
+    fpm->insertWaypoint(FlightPlanManager::TEMPORARY_A, 2, "KSEA", 47.45, -122.30);
+    TEST_ASSERT(fpm->getWaypointCount(FlightPlanManager::TEMPORARY_A) == 3);
+    TEST_ASSERT(fpm->getWaypointCount(FlightPlanManager::ACTIVE) == 2);
+
+    fpm->commitTemporary(FlightPlanManager::TEMPORARY_A);
+    TEST_ASSERT(fpm->getWaypointCount(FlightPlanManager::ACTIVE) == 3);
+    TEST_ASSERT(fpm->getWaypointName(FlightPlanManager::ACTIVE, 2) == "KSEA");
+
+    std::cout << "testFlightPlanManager passed!" << std::endl;
+}
+
+void testFMGCController()
+{
+    std::cout << "Running testFMGCController..." << std::endl;
+    auto *fmgc = FMGCController::instance();
+    fmgc->setPhase(FMGCController::PREFLIGHT);
+
+    // Dynamic phase update checks
+    // Preflight -> Takeoff when thrust levers pushed and gs > 80
+    fmgc->update(1.0, 100.0, 140.0, 95.0, true, true);
+    TEST_ASSERT(fmgc->getPhase() == FMGCController::TAKEOFF);
+
+    // Takeoff -> Climb above thrust reduction alt (1500 ft)
+    fmgc->update(1.0, 1600.0, 200.0, 90.0, false, true);
+    TEST_ASSERT(fmgc->getPhase() == FMGCController::CLIMB);
+
+    std::cout << "testFMGCController passed!" << std::endl;
+}
+
+void testPerformanceEngine()
+{
+    std::cout << "Running testPerformanceEngine..." << std::endl;
+    auto *perf = PerformanceEngine::instance();
+
+    // VLS speed calculations
+    double vlsClean = perf->getVLS(64000.0, 0); // flap 0
+    double vlsFull = perf->getVLS(64000.0, 4);  // flap 4
+    TEST_ASSERT(vlsClean > vlsFull);
+
+    // Green dot check
+    double gd = perf->getGreenDot(64000.0);
+    TEST_ASSERT(gd > 120.0 && gd < 250.0);
+
+    std::cout << "testPerformanceEngine passed!" << std::endl;
+}
+
+void testPredictionEngine()
+{
+    std::cout << "Running testPredictionEngine..." << std::endl;
+    auto *pred = PredictionEngine::instance();
+
+    // Climb & descent points check
+    auto points = pred->calculateClimbDescentPoints(1500.0, 35000.0, 2000.0, 2000.0, 450.0);
+    TEST_ASSERT(points.first > 0.0);
+    TEST_ASSERT(points.second > 0.0);
+
+    std::cout << "testPredictionEngine passed!" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -320,6 +442,11 @@ int main(int argc, char *argv[])
     testAutopilotController();
     testFlightControlLaws();
     testSystemsManager();
+    testNavigationDatabase();
+    testFlightPlanManager();
+    testFMGCController();
+    testPerformanceEngine();
+    testPredictionEngine();
     std::cout << "========== ALL TESTS PASSED SUCCESSFULLY ==========" << std::endl;
     return 0;
 }

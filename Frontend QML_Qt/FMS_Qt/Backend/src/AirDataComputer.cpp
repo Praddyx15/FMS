@@ -149,6 +149,40 @@ void AirDataComputer::onTick()
 void AirDataComputer::tick(double dt)
 {
     m_simTime += dt;
+
+    // ── Engines (EngineModel) ─────────────────────────────────────────────────
+    double oatK = isaTemperature(m_altitude);
+    m_engines.tick(dt, m_altitude, m_mach, oatK,
+                   m_activeFailures.contains("ENGINE_FIRE_1"),
+                   m_activeFailures.contains("ENGINE_FIRE_2"));
+
+    // Copy engine states to FlightDataBus
+    auto *bus = DataBus::FlightDataBus::instance();
+    {
+        QMutexLocker locker(&bus->mutex);
+        auto &eng = bus->aircraft().engines;
+        eng.n1Left = m_engines.n1Left;
+        eng.n1Right = m_engines.n1Right;
+        eng.n2Left = m_engines.n2Left;
+        eng.n2Right = m_engines.n2Right;
+        eng.egtLeft = m_engines.egtLeft;
+        eng.egtRight = m_engines.egtRight;
+        eng.ffLeft = m_engines.ffLeft;
+        eng.ffRight = m_engines.ffRight;
+        eng.oilPressureLeft = m_engines.oilPressureLeft;
+        eng.oilPressureRight = m_engines.oilPressureRight;
+        eng.oilTempLeft = m_engines.oilTempLeft;
+        eng.oilTempRight = m_engines.oilTempRight;
+        eng.vibN1Left = m_engines.vibN1Left;
+        eng.vibN1Right = m_engines.vibN1Right;
+        eng.vibN2Left = m_engines.vibN2Left;
+        eng.vibN2Right = m_engines.vibN2Right;
+        eng.thrustN1 = m_engines.thrustN1;
+        eng.thrustN2 = m_engines.thrustN2;
+        eng.started1 = m_engines.started1;
+        eng.started2 = m_engines.started2;
+    }
+
     SystemsManager::instance()->tick(dt);
     updatePhysics(dt);
     updateSpeedProtection();
@@ -159,19 +193,8 @@ void AirDataComputer::tick(double dt)
     if (phaseChangedNow) emit phaseChanged();
     emit autopilotChanged();
 
-    // ── Engines (EngineModel) ─────────────────────────────────────────────────
-    m_engines.tick(dt,
-                   m_activeFailures.contains("ENGINE_FIRE_1"),
-                   m_activeFailures.contains("ENGINE_FIRE_2"));
-
     // ── Fuel burn ─────────────────────────────────────────────────────────────
-    // ~2.5 kg/s per engine at cruise N1 (~65%). Scale linearly with N1.
-    double burnRate = (m_engines.n1Left + m_engines.n1Right) / 100.0 * 2.0 * dt; // kg per tick
-    if (burnRate > 0.0) {
-        if (FlightDataManager *fdm = FlightDataManager::instance())
-            fdm->decrementFuel(burnRate);
-    }
-
+    // Fuel burn is now handled inside SystemsManager::updateFuel()
     emit dataChanged();
 }
 

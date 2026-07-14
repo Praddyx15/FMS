@@ -28,6 +28,7 @@ void SystemsManager::tick(double dt)
     updateHydraulics(dt, bus);
     updateElectrical(dt, bus);
     updateFuel(dt, bus);
+    updateADIRS(dt, bus);
 }
 
 void SystemsManager::applyBrakes()
@@ -61,10 +62,61 @@ void SystemsManager::updateAPU(double dt, DataBus::FlightDataBus *bus)
 {
     auto &sys = bus->systems();
     if (sys.apuMasterSw) {
-        // APU startup/running simulation
-        sys.apuActive = true;
+        if (sys.apuStartSw) {
+            // Spool up APU
+            sys.apuN = std::min(100.0, sys.apuN + dt * 10.0); // ~10 seconds to reach 100%
+            if (sys.apuN >= 95.0) {
+                sys.apuActive = true;
+            }
+            // EGT peak during startup, then settle
+            if (sys.apuN < 95.0) {
+                // Peak at 650°C
+                sys.apuEgt = 15.0 + (sys.apuN / 95.0) * 635.0;
+            } else {
+                // Settle to 400°C
+                sys.apuEgt = 400.0;
+            }
+        } else {
+            // Master switch is on, but start is not pressed
+            sys.apuN = std::max(0.0, sys.apuN - dt * 15.0);
+            sys.apuEgt = std::max(15.0, sys.apuEgt - dt * 25.0);
+            sys.apuActive = false;
+        }
     } else {
+        // Master switch off: shutdown/cooldown
+        sys.apuStartSw = false;
+        sys.apuN = std::max(0.0, sys.apuN - dt * 15.0);
+        sys.apuEgt = std::max(15.0, sys.apuEgt - dt * 25.0);
         sys.apuActive = false;
+    }
+}
+
+void SystemsManager::updateADIRS(double dt, DataBus::FlightDataBus *bus)
+{
+    auto &sys = bus->systems();
+    for (int i = 0; i < 3; ++i) {
+        if (sys.adirsActive[i]) {
+            if (sys.adirsMode[i] == 1) { // ALIGN
+                sys.adirsAlignTime[i] = std::max(0.0, sys.adirsAlignTime[i] - dt);
+                if (sys.adirsAlignTime[i] <= 0.0) {
+                    sys.adirsMode[i] = 2; // NAV (aligned)
+                }
+            } else if (sys.adirsMode[i] == 0) {
+                // Set to ALIGN if it was OFF
+                sys.adirsMode[i] = 1;
+                sys.adirsAlignTime[i] = 600.0;
+            }
+
+            // degraded mode (ATT) if GNSS/GPS is inactive and it was aligned/nav
+            if (!sys.gnssActive && sys.adirsMode[i] == 2) {
+                sys.adirsMode[i] = 3; // ATT
+            } else if (sys.gnssActive && sys.adirsMode[i] == 3) {
+                sys.adirsMode[i] = 2; // Restore NAV
+            }
+        } else {
+            sys.adirsMode[i] = 0; // OFF
+            sys.adirsAlignTime[i] = 0.0;
+        }
     }
 }
 
@@ -73,10 +125,8 @@ void SystemsManager::updateHydraulics(double dt, DataBus::FlightDataBus *bus)
     auto &sys = bus->systems();
     auto &ac = bus->aircraft();
 
-    // In a future Phase 3 EngineModel, we will read live N1. For now, we mock/read from m_engines.
-    // Let's assume engines are running at N1 if active.
-    double eng1N1 = 65.0; // Mock cruise N1
-    double eng2N1 = 65.0;
+    double eng1N1 = ac.engines.n1Left;
+    double eng2N1 = ac.engines.n1Right;
 
     // Check failures
     bool greenLeak = bus->training().activeFailures.contains("HYD_GREEN_LEAK");
@@ -128,10 +178,11 @@ void SystemsManager::updateHydraulics(double dt, DataBus::FlightDataBus *bus)
 void SystemsManager::updateElectrical(double dt, DataBus::FlightDataBus *bus)
 {
     auto &sys = bus->systems();
+    auto &ac = bus->aircraft();
 
     // Sources availability
-    bool gen1Available = sys.elec.idg1Active && !bus->training().activeFailures.contains("GEN_1_FAULT");
-    bool gen2Available = sys.elec.idg2Active && !bus->training().activeFailures.contains("GEN_2_FAULT");
+    bool gen1Available = sys.elec.idg1Active && ac.engines.n2Left > 50.0 && !bus->training().activeFailures.contains("GEN_1_FAULT");
+    bool gen2Available = sys.elec.idg2Active && ac.engines.n2Right > 50.0 && !bus->training().activeFailures.contains("GEN_2_FAULT");
     bool apuGenAvailable = sys.apuActive && sys.elec.apuGenActive;
     bool extPwrAvailable = sys.elec.extPwrActive;
 
@@ -196,5 +247,101 @@ void SystemsManager::updateElectrical(double dt, DataBus::FlightDataBus *bus)
 
 void SystemsManager::updateFuel(double dt, DataBus::FlightDataBus *bus)
 {
-    // Slats state/N1 details can affect auto pump logic here
+    auto &sys = bus->systems();
+    auto &ac = bus->aircraft();
+
+    // Fuel flows are in kg/hr
+    double burnLeft = (ac.engines.ffLeft * dt) / 3600.0;
+    double burnRight = (ac.engines.ffRight * dt) / 3600.0;
+
+    // Fuel tanks: 0 = Outer Left, 1 = Inner Left, 2 = Center, 3 = Inner Right, 4 = Outer Right
+    double &outL  = ac.weight.fuel_per_tank[0];
+    double &innL  = ac.weight.fuel_per_tank[1];
+    double &ctr   = ac.weight.fuel_per_tank[2];
+    double &innR  = ac.weight.fuel_per_tank[3];
+    double &outR  = ac.weight.fuel_per_tank[4];
+
+    // Outer-to-inner transfer (automatic in A320 when inner tank drops below ~750 kg)
+    if (innL < 750.0 && outL > 0.0) {
+        double transfer = std::min(outL, 10.0 * dt); // transfer rate
+        outL -= transfer;
+        innL += transfer;
+    }
+    if (innR < 750.0 && outR > 0.0) {
+        double transfer = std::min(outR, 10.0 * dt);
+        outR -= transfer;
+        innR += transfer;
+    }
+
+    // Determine pump availability (need electrical power for pumps)
+    bool ac1Ok = (sys.elec.acBus1 > 50.0);
+    bool ac2Ok = (sys.elec.acBus2 > 50.0);
+    bool pumpL1 = sys.fuel.pumps[0] && ac1Ok;
+    bool pumpL2 = sys.fuel.pumps[1] && ac2Ok;
+    bool pumpC1 = sys.fuel.pumps[2] && ac1Ok;
+    bool pumpC2 = sys.fuel.pumps[3] && ac2Ok;
+    bool pumpR1 = sys.fuel.pumps[4] && ac1Ok;
+    bool pumpR2 = sys.fuel.pumps[5] && ac2Ok;
+
+    bool leftFeedOk = (pumpL1 || pumpL2) && (innL > 0.0);
+    bool rightFeedOk = (pumpR1 || pumpR2) && (innR > 0.0);
+    bool centerFeedOk = (pumpC1 || pumpC2) && (ctr > 0.0);
+
+    // Fuel consumption execution
+    if (sys.fuel.crossfeedOpen) {
+        // Crossfeed open: draw from center first if pumps are active, then inner tanks
+        double totalBurn = burnLeft + burnRight;
+        if (centerFeedOk && ctr > 0.0) {
+            double draw = std::min(ctr, totalBurn);
+            ctr -= draw;
+            totalBurn -= draw;
+        }
+        if (totalBurn > 0.0) {
+            double totalInner = innL + innR;
+            if (totalInner > 0.0) {
+                double drawL = std::min(innL, totalBurn * (innL / totalInner));
+                double drawR = std::min(innR, totalBurn * (innR / totalInner));
+                innL -= drawL;
+                innR -= drawR;
+            }
+        }
+    } else {
+        // Engine 1 (Left)
+        double neededLeft = burnLeft;
+        if (centerFeedOk && pumpC1 && ctr > 0.0) {
+            double draw = std::min(ctr, neededLeft);
+            ctr -= draw;
+            neededLeft -= draw;
+        }
+        if (neededLeft > 0.0 && leftFeedOk) {
+            double draw = std::min(innL, neededLeft);
+            innL -= draw;
+        }
+
+        // Engine 2 (Right)
+        double neededRight = burnRight;
+        if (centerFeedOk && pumpC2 && ctr > 0.0) {
+            double draw = std::min(ctr, neededRight);
+            ctr -= draw;
+            neededRight -= draw;
+        }
+        if (neededRight > 0.0 && rightFeedOk) {
+            double draw = std::min(innR, neededRight);
+            innR -= draw;
+        }
+    }
+
+    // Keep fuel positive
+    for (int i = 0; i < 5; ++i) {
+        if (ac.weight.fuel_per_tank[i] < 0.0) {
+            ac.weight.fuel_per_tank[i] = 0.0;
+        }
+    }
+
+    // Recalculate total aircraft mass and CG shift
+    double totalFuel = outL + innL + ctr + innR + outR;
+    ac.weight.mass = bus->avionics().zeroFuelWeight + totalFuel;
+
+    // CG shift model
+    ac.weight.cg_mac_pct = 25.0 + (ctr / 6200.0) * 2.0 - ((outL + innL + innR + outR) / 12400.0) * 1.5;
 }

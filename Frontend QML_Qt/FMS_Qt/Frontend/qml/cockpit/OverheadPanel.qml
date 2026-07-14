@@ -32,12 +32,13 @@ Rectangle {
 
         // ── Electrical ────────────────────────────────────────────────────
         OHPanel {
-            title: "ELECTRICAL"
+            title: "ELECTRICAL / APU"
             Layout.columnSpan: 1
             model: [
-                { label: "GEN 1", prop: "gen1Active", col: Theme.green },
-                { label: "GEN 2", prop: "gen2Active", col: Theme.green },
-                { label: "APU",   prop: "apuActive",  col: Theme.amber },
+                { label: "GEN 1",   prop: "gen1Active",  col: Theme.green },
+                { label: "GEN 2",   prop: "gen2Active",  col: Theme.green },
+                { label: "APU MST", prop: "apuMasterSw", col: Theme.amber },
+                { label: "APU STR", prop: "apuStartSw",  col: Theme.amber },
             ]
         }
 
@@ -46,9 +47,10 @@ Rectangle {
             title: "NAVIGATION"
             Layout.columnSpan: 1
             model: [
-                { label: "GPS 1",  prop: "gnssActive", col: Theme.cyan },
-                { label: "ADIRS 1", prop: "gnssActive", col: Theme.cyan },
-                { label: "ADIRS 2", prop: "gnssActive", col: Theme.cyan },
+                { label: "GPS 1",   prop: "gnssActive",   col: Theme.cyan },
+                { label: "ADIRS 1", prop: "adirs1Active", col: Theme.cyan },
+                { label: "ADIRS 2", prop: "adirs2Active", col: Theme.cyan },
+                { label: "ADIRS 3", prop: "adirs3Active", col: Theme.cyan },
             ]
         }
 
@@ -73,8 +75,15 @@ Rectangle {
                             Text { text: modelData; color: "#546e7a"; font.pixelSize: 8; font.family: "Consolas" }
                             Text {
                                 text: {
-                                    var vals = [800, 5400, 6200, 5400, 800]
-                                    return vals[index].toString() + " kg"
+                                    if (!FlightDataManager) return "0 kg";
+                                    var vals = [
+                                        FlightDataManager.fuelLOuter,
+                                        FlightDataManager.fuelLInner,
+                                        FlightDataManager.fuelCentre,
+                                        FlightDataManager.fuelRInner,
+                                        FlightDataManager.fuelROuter
+                                    ];
+                                    return Math.round(vals[index]).toString() + " kg"
                                 }
                                 color: Theme.cyan; font.pixelSize: 9; font.bold: true; font.family: "Consolas"
                             }
@@ -84,7 +93,18 @@ Rectangle {
                     ColumnLayout {
                         spacing: 2
                         Text { text: "TOTAL"; color: "#546e7a"; font.pixelSize: 8; font.family: "Consolas" }
-                        Text { text: "18600 kg"; color: Theme.amber; font.pixelSize: 11; font.bold: true; font.family: "Consolas" }
+                        Text {
+                            text: {
+                                if (!FlightDataManager) return "0 kg";
+                                var total = FlightDataManager.fuelLOuter +
+                                            FlightDataManager.fuelLInner +
+                                            FlightDataManager.fuelCentre +
+                                            FlightDataManager.fuelRInner +
+                                            FlightDataManager.fuelROuter;
+                                return Math.round(total).toString() + " kg";
+                            }
+                            color: Theme.amber; font.pixelSize: 11; font.bold: true; font.family: "Consolas"
+                        }
                     }
                 }
             }

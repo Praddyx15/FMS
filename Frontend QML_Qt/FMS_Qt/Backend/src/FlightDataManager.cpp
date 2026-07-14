@@ -226,6 +226,69 @@ bool FlightDataManager::apuMasterSw() const
     return bus->systems().apuMasterSw;
 }
 
+bool FlightDataManager::apuStartSw() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().apuStartSw;
+}
+
+double FlightDataManager::apuN() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().apuN;
+}
+
+double FlightDataManager::apuEgt() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().apuEgt;
+}
+
+int FlightDataManager::adirs1Mode() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().adirsMode[0];
+}
+
+int FlightDataManager::adirs2Mode() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().adirsMode[1];
+}
+
+int FlightDataManager::adirs3Mode() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().adirsMode[2];
+}
+
+double FlightDataManager::adirs1AlignTime() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().adirsAlignTime[0];
+}
+
+double FlightDataManager::adirs2AlignTime() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().adirsAlignTime[1];
+}
+
+double FlightDataManager::adirs3AlignTime() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().adirsAlignTime[2];
+}
+
 bool FlightDataManager::gnssActive() const
 {
     auto *bus = DataBus::FlightDataBus::instance();
@@ -329,6 +392,83 @@ int FlightDataManager::fuelROuter() const
     auto *bus = DataBus::FlightDataBus::instance();
     QMutexLocker locker(&bus->mutex);
     return static_cast<int>(bus->aircraft().weight.fuel_per_tank[4]);
+}
+
+double FlightDataManager::hydraulicGreenPressure() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().hyd.greenPressure;
+}
+
+double FlightDataManager::hydraulicYellowPressure() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().hyd.yellowPressure;
+}
+
+double FlightDataManager::hydraulicBluePressure() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().hyd.bluePressure;
+}
+
+double FlightDataManager::acBus1() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.acBus1;
+}
+
+double FlightDataManager::acBus2() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.acBus2;
+}
+
+double FlightDataManager::acEss() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.acEss;
+}
+
+double FlightDataManager::dcBus1() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.dcBus1;
+}
+
+double FlightDataManager::dcBus2() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.dcBus2;
+}
+
+double FlightDataManager::dcEss() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.dcEss;
+}
+
+double FlightDataManager::bat1Voltage() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.bat1Voltage;
+}
+
+double FlightDataManager::bat2Voltage() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().elec.bat2Voltage;
 }
 
 int FlightDataManager::ndRange() const
@@ -639,6 +779,16 @@ void FlightDataManager::setApuMasterSw(bool v)
     }
 }
 
+void FlightDataManager::setApuStartSw(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().apuStartSw != v) {
+        bus->systems().apuStartSw = v;
+        emit systemsChanged();
+    }
+}
+
 void FlightDataManager::setGnssActive(bool v)
 {
     auto *bus = DataBus::FlightDataBus::instance();
@@ -665,6 +815,8 @@ void FlightDataManager::setAdirs1Active(bool v)
     QMutexLocker locker(&bus->mutex);
     if (bus->systems().adirsActive[0] != v) {
         bus->systems().adirsActive[0] = v;
+        bus->systems().adirsMode[0] = v ? 1 : 0;
+        bus->systems().adirsAlignTime[0] = v ? 600.0 : 0.0;
         emit systemsChanged();
     }
 }
@@ -675,6 +827,8 @@ void FlightDataManager::setAdirs2Active(bool v)
     QMutexLocker locker(&bus->mutex);
     if (bus->systems().adirsActive[1] != v) {
         bus->systems().adirsActive[1] = v;
+        bus->systems().adirsMode[1] = v ? 1 : 0;
+        bus->systems().adirsAlignTime[1] = v ? 600.0 : 0.0;
         emit systemsChanged();
     }
 }
@@ -685,6 +839,8 @@ void FlightDataManager::setAdirs3Active(bool v)
     QMutexLocker locker(&bus->mutex);
     if (bus->systems().adirsActive[2] != v) {
         bus->systems().adirsActive[2] = v;
+        bus->systems().adirsMode[2] = v ? 1 : 0;
+        bus->systems().adirsAlignTime[2] = v ? 600.0 : 0.0;
         emit systemsChanged();
     }
 }

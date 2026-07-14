@@ -10,6 +10,10 @@
 #include "Backend/include/FMSComputer.hpp"
 #include "Backend/include/InstructorEngine.hpp"
 #include "Backend/include/ArincParser.hpp"
+#include "Backend/include/FlightPlanManager.hpp"
+#include "Backend/include/FMGCController.hpp"
+#include "Backend/include/PerformanceEngine.hpp"
+#include "Backend/include/PredictionEngine.hpp"
 #include <QFile>
 #include <QDir>
 #include <QUrl>
@@ -83,6 +87,30 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonType<FlightDataManager>("FmsBackend", 1, 0, "FlightDataManager",
         [](QQmlEngine *, QJSEngine *) -> QObject * {
             return FlightDataManager::instance();
+        }
+    );
+
+    qmlRegisterSingletonType<FlightPlanManager>("FmsBackend", 1, 0, "FlightPlanManager",
+        [](QQmlEngine *, QJSEngine *) -> QObject * {
+            return FlightPlanManager::instance();
+        }
+    );
+
+    qmlRegisterSingletonType<FMGCController>("FmsBackend", 1, 0, "FMGCController",
+        [](QQmlEngine *, QJSEngine *) -> QObject * {
+            return FMGCController::instance();
+        }
+    );
+
+    qmlRegisterSingletonType<PerformanceEngine>("FmsBackend", 1, 0, "PerformanceEngine",
+        [](QQmlEngine *, QJSEngine *) -> QObject * {
+            return PerformanceEngine::instance();
+        }
+    );
+
+    qmlRegisterSingletonType<PredictionEngine>("FmsBackend", 1, 0, "PredictionEngine",
+        [](QQmlEngine *, QJSEngine *) -> QObject * {
+            return PredictionEngine::instance();
         }
     );
 

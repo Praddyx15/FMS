@@ -49,12 +49,34 @@ class FlightDataManager : public QObject
     Q_PROPERTY(bool gen2Active      READ gen2Active      WRITE setGen2Active      NOTIFY systemsChanged)
     Q_PROPERTY(bool apuActive       READ apuActive       WRITE setApuActive       NOTIFY systemsChanged)
     Q_PROPERTY(bool apuMasterSw     READ apuMasterSw     WRITE setApuMasterSw     NOTIFY systemsChanged)
+    Q_PROPERTY(bool apuStartSw      READ apuStartSw      WRITE setApuStartSw      NOTIFY systemsChanged)
+    Q_PROPERTY(double apuN          READ apuN                                     NOTIFY systemsChanged)
+    Q_PROPERTY(double apuEgt        READ apuEgt                                   NOTIFY systemsChanged)
     Q_PROPERTY(bool gnssActive      READ gnssActive      WRITE setGnssActive      NOTIFY systemsChanged)
     Q_PROPERTY(double gnssDrift     READ gnssDrift       WRITE setGnssDrift       NOTIFY systemsChanged)
     // ADIRS
     Q_PROPERTY(bool adirs1Active READ adirs1Active WRITE setAdirs1Active NOTIFY systemsChanged)
     Q_PROPERTY(bool adirs2Active READ adirs2Active WRITE setAdirs2Active NOTIFY systemsChanged)
     Q_PROPERTY(bool adirs3Active READ adirs3Active WRITE setAdirs3Active NOTIFY systemsChanged)
+
+    // Live systems telemetry properties
+    Q_PROPERTY(double hydraulicGreenPressure READ hydraulicGreenPressure NOTIFY systemsChanged)
+    Q_PROPERTY(double hydraulicYellowPressure READ hydraulicYellowPressure NOTIFY systemsChanged)
+    Q_PROPERTY(double hydraulicBluePressure READ hydraulicBluePressure NOTIFY systemsChanged)
+    Q_PROPERTY(double acBus1 READ acBus1 NOTIFY systemsChanged)
+    Q_PROPERTY(double acBus2 READ acBus2 NOTIFY systemsChanged)
+    Q_PROPERTY(double acEss READ acEss NOTIFY systemsChanged)
+    Q_PROPERTY(double dcBus1 READ dcBus1 NOTIFY systemsChanged)
+    Q_PROPERTY(double dcBus2 READ dcBus2 NOTIFY systemsChanged)
+    Q_PROPERTY(double dcEss READ dcEss NOTIFY systemsChanged)
+    Q_PROPERTY(double bat1Voltage READ bat1Voltage NOTIFY systemsChanged)
+    Q_PROPERTY(double bat2Voltage READ bat2Voltage NOTIFY systemsChanged)
+    Q_PROPERTY(int adirs1Mode READ adirs1Mode NOTIFY systemsChanged)
+    Q_PROPERTY(int adirs2Mode READ adirs2Mode NOTIFY systemsChanged)
+    Q_PROPERTY(int adirs3Mode READ adirs3Mode NOTIFY systemsChanged)
+    Q_PROPERTY(double adirs1AlignTime READ adirs1AlignTime NOTIFY systemsChanged)
+    Q_PROPERTY(double adirs2AlignTime READ adirs2AlignTime NOTIFY systemsChanged)
+    Q_PROPERTY(double adirs3AlignTime READ adirs3AlignTime NOTIFY systemsChanged)
     // Air conditioning
     Q_PROPERTY(bool pack1Active  READ pack1Active  WRITE setPack1Active  NOTIFY systemsChanged)
     Q_PROPERTY(bool pack2Active  READ pack2Active  WRITE setPack2Active  NOTIFY systemsChanged)
@@ -116,11 +138,20 @@ public:
     bool   gen2Active()      const;
     bool   apuActive()       const;
     bool   apuMasterSw()     const;
+    bool   apuStartSw()      const;
+    double apuN()            const;
+    double apuEgt()          const;
     bool   gnssActive()      const;
     double gnssDrift()       const;
     bool   adirs1Active()    const;
     bool   adirs2Active()    const;
     bool   adirs3Active()    const;
+    int    adirs1Mode()      const;
+    int    adirs2Mode()      const;
+    int    adirs3Mode()      const;
+    double adirs1AlignTime() const;
+    double adirs2AlignTime() const;
+    double adirs3AlignTime() const;
     bool   pack1Active()     const;
     bool   pack2Active()     const;
     bool   wingAntiIce()     const;
@@ -131,6 +162,19 @@ public:
     int    fuelCentre()      const;
     int    fuelRInner()      const;
     int    fuelROuter()      const;
+
+    // Live systems telemetry getters
+    double hydraulicGreenPressure() const;
+    double hydraulicYellowPressure() const;
+    double hydraulicBluePressure() const;
+    double acBus1() const;
+    double acBus2() const;
+    double acEss() const;
+    double dcBus1() const;
+    double dcBus2() const;
+    double dcEss() const;
+    double bat1Voltage() const;
+    double bat2Voltage() const;
 
     // EFIS
     int     ndRange()     const;
@@ -168,6 +212,7 @@ public:
     void setGen2Active(bool v);
     void setApuActive(bool v);
     void setApuMasterSw(bool v);
+    void setApuStartSw(bool v);
     void setGnssActive(bool v);
     void setGnssDrift(double v);
     void setAdirs1Active(bool v);
