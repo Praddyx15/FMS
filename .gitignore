@@ -22,3 +22,8 @@ compile_commands.json
 
 # Machine-local Claude Code settings
 .claude/settings.local.json
+
+# Skill/tooling scaffolding (office schemas, caches) - not project code
+scripts/office/
+__pycache__/
+*.pyc

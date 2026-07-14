@@ -114,9 +114,12 @@ Remaining (post-audit 07-13):
 - ✅ (07-12) Hydraulics/elec read live engine state from the bus (mocked N1 gone);
   `updateFuel()` real: FF-driven per-tank burn, outer→inner auto transfer, pump
   power from AC buses, crossfeed; ADC flat burn removed (no double burn).
-- 🟡 Elec: IDG availability ignores engine state — `gen1Available` is flag+failure
-  only; require engine N2 running (engines-off should drop GEN 1/2).
-- 🔴 APU: real start/run/EGT model (currently near-instant flag; start switch works).
+- ✅ (07-13) Elec IDG requires engine N2 > 50% (engines-off drops GEN 1/2); APU has
+  a real spool model (N ramp ~10 s, EGT peak 650→settle 400 °C, shutdown decay);
+  ADIRS OFF→ALIGN(600 s)→NAV with ATT degradation implemented in `updateADIRS`.
+- 🟡 ADIRS refinements vs doc 05 §1.3: no fast-align (7 min on ground w/ position),
+  no ADR-data-at-90 s stage; ATT mode keys off GNSS loss instead of alignment loss;
+  expose mode/countdown to QML (IRS INIT page + OHP annunciators).
 - 🟡 CG shift from fuel distribution (weight.cg_mac_pct is static).
 - 🟡 Pneumatic (bleeds, X-bleed, packs), pressurization (cabin alt, outflow,
   ditching), fire protection (loops, squibs, agents).
