@@ -16,6 +16,8 @@ add_library(FmsBackend STATIC
     src/FMGCController.cpp
     src/PerformanceEngine.cpp
     src/PredictionEngine.cpp
+    src/ThrottleQuadrantModel.cpp
+    src/GroundModel.cpp
     include/AirDataComputer.hpp
     include/AutopilotController.hpp
     include/EngineModel.hpp
@@ -32,6 +34,8 @@ add_library(FmsBackend STATIC
     include/FMGCController.hpp
     include/PerformanceEngine.hpp
     include/PredictionEngine.hpp
+    include/ThrottleQuadrantModel.hpp
+    include/GroundModel.hpp
 )
 
 target_include_directories(FmsBackend PUBLIC include)

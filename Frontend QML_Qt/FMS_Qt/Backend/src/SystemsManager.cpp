@@ -1,4 +1,5 @@
 #include "SystemsManager.hpp"
+#include "AirDataComputer.hpp"
 #include <QMutexLocker>
 #include <algorithm>
 #include <cmath>
@@ -29,6 +30,8 @@ void SystemsManager::tick(double dt)
     updateElectrical(dt, bus);
     updateFuel(dt, bus);
     updateADIRS(dt, bus);
+    updatePneumatics(dt, bus);
+    updatePressurization(dt, bus);
 }
 
 void SystemsManager::applyBrakes()
@@ -104,7 +107,7 @@ void SystemsManager::updateADIRS(double dt, DataBus::FlightDataBus *bus)
             } else if (sys.adirsMode[i] == 0) {
                 // Set to ALIGN if it was OFF
                 sys.adirsMode[i] = 1;
-                sys.adirsAlignTime[i] = 600.0;
+                sys.adirsAlignTime[i] = 420.0; // 7 minutes
             }
 
             // degraded mode (ATT) if GNSS/GPS is inactive and it was aligned/nav
@@ -344,4 +347,100 @@ void SystemsManager::updateFuel(double dt, DataBus::FlightDataBus *bus)
 
     // CG shift model
     ac.weight.cg_mac_pct = 25.0 + (ctr / 6200.0) * 2.0 - ((outL + innL + innR + outR) / 12400.0) * 1.5;
+}
+
+void SystemsManager::updatePneumatics(double dt, DataBus::FlightDataBus *bus)
+{
+    auto &sys = bus->systems();
+    auto &ac = bus->aircraft();
+
+    // 1. Bleed pressure calculation based on engine N2, N1, and bleedFlow
+    double eng1BleedPres = 0.0;
+    if (sys.engBleed1 && ac.engines.n2Left > 50.0 && ac.engines.bleedFlow1 > 0.0) {
+        eng1BleedPres = 40.0 + (ac.engines.n1Left - 20.0) * 0.5;
+    }
+    double eng2BleedPres = 0.0;
+    if (sys.engBleed2 && ac.engines.n2Right > 50.0 && ac.engines.bleedFlow2 > 0.0) {
+        eng2BleedPres = 40.0 + (ac.engines.n1Right - 20.0) * 0.5;
+    }
+    double apuBleedPres = 0.0;
+    if (sys.apuBleed && sys.apuActive) {
+        apuBleedPres = 35.0; // APU Bleed Pressure
+    }
+
+    // 2. Cross-bleed logic
+    // Mode: 0=OFF, 1=AUTO, 2=OPEN
+    bool crossBleedOpen = false;
+    if (sys.crossBleedMode == 2) {
+        crossBleedOpen = true;
+    } else if (sys.crossBleedMode == 1) {
+        // AUTO: open crossfeed if only APU bleed is active or engine bleed is asymmetrical
+        if (sys.apuBleed && sys.apuActive) {
+            crossBleedOpen = true;
+        } else if ((eng1BleedPres > 10.0) != (eng2BleedPres > 10.0)) {
+            crossBleedOpen = true;
+        }
+    }
+
+    // Determine manifold pressure left & right
+    double bleedManifoldL = eng1BleedPres;
+    double bleedManifoldR = eng2BleedPres;
+    if (apuBleedPres > 0.0) {
+        bleedManifoldL = std::max(bleedManifoldL, apuBleedPres);
+    }
+    if (crossBleedOpen) {
+        double maxPres = std::max(bleedManifoldL, bleedManifoldR);
+        bleedManifoldL = maxPres;
+        bleedManifoldR = maxPres;
+    }
+
+    // 3. Packs Flow
+    bool pack1Active = sys.pack1On && (bleedManifoldL > 15.0);
+    bool pack2Active = sys.pack2On && (bleedManifoldR > 15.0);
+    sys.packs[0] = pack1Active;
+    sys.packs[1] = pack2Active;
+
+    sys.bleedPressure1 = bleedManifoldL;
+    sys.bleedPressure2 = bleedManifoldR;
+}
+
+void SystemsManager::updatePressurization(double dt, DataBus::FlightDataBus *bus)
+{
+    auto &sys = bus->systems();
+    auto &ac = bus->aircraft();
+
+    bool pack1Active = sys.packs[0];
+    bool pack2Active = sys.packs[1];
+
+    // 4. Cabin Pressurization Model
+    double cabinTargetAlt = 0.0;
+    double planeAlt = ac.position.altitude_geometric;
+    if (planeAlt > 0.0) {
+        cabinTargetAlt = std::clamp(planeAlt * 0.2, 0.0, 8000.0);
+    }
+
+    double rate = 0.0;
+    if (pack1Active || pack2Active) {
+        double diff = cabinTargetAlt - sys.cabinAltitude;
+        rate = std::clamp(diff / 10.0, -350.0 / 60.0, 500.0 / 60.0); // limit climb/desc rate
+    } else {
+        double diff = planeAlt - sys.cabinAltitude;
+        rate = std::clamp(diff / 5.0, -1000.0 / 60.0, 1500.0 / 60.0); // leak
+    }
+
+    // Ditching Override
+    if (sys.ditchingOverride) {
+        rate = 0.0;
+        sys.outflowValvePos = 0.0; // close
+    } else {
+        sys.outflowValvePos = (pack1Active || pack2Active) ? 0.3 + std::clamp(rate / (500.0/60.0), -0.3, 0.7) : 1.0;
+    }
+
+    sys.cabinAltitude = std::clamp(sys.cabinAltitude + rate * dt, 0.0, planeAlt);
+    sys.cabinVsi = rate * 60.0;
+
+    // Calculate differential pressure (Delta P) in psi
+    double pCabin = AirDataComputer::isaPressure(sys.cabinAltitude);
+    double pPlane = AirDataComputer::isaPressure(planeAlt);
+    sys.cabinDeltaP = std::max(0.0, (pCabin - pPlane) * 0.000145038);
 }

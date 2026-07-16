@@ -136,6 +136,20 @@ Antigravity + Claude Code are the two working agents — don't add a third orche
 1. Start: `git status` — detect the other agent's uncommitted work.
 2. Read `IMPLEMENTATION_PLAN.md` §1–§3 before coding; it is the sole truth
    (work logs are not — verify claims against diffs).
-3. End: build + `FmsTests.exe` green + warning-free smoke run
-   (`QT_FORCE_STDERR_LOGGING=1`), update plan statuses, commit with the phase
-   reference, push to `Praddyx15/FMS`.
+3. **Commit as soon as a change is build-clean and test-green — not only at the
+   end of a multi-hour/multi-session arc.** (2026-07-16: ~600 lines of verified
+   working code sat uncommitted across two sessions — real progress that a crash
+   or bad edit could have destroyed.) Each commit: build + `FmsTests.exe` green +
+   warning-free smoke run (`QT_FORCE_STDERR_LOGGING=1`), update plan statuses,
+   commit with the phase reference, push to `Praddyx15/FMS`.
+4. Never leave a property/method DECLARED without a definition across a session
+   boundary — an undefined-reference link error is invisible until someone builds,
+   and blocks everyone else's work in the meantime (happened 07-16 with the
+   pneumatics Q_PROPERTY surface).
+
+## 5. Prompt-writing discipline
+
+Keep prompts to future agents surgical: name the exact files to read/touch, cite
+the plan section, and state the acceptance gate (build+tests+smoke) up front,
+rather than open-ended "improve the systems" asks — this keeps sessions scoped
+and their diffs easy to audit against the plan.

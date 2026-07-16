@@ -52,11 +52,6 @@ public:
     double thrust2 = 30.0;
 
     /**
-     * Legacy tick overload forwarding to the new detailed physical tick.
-     */
-    void tick(double dt, bool fire1, bool fire2);
-
-    /**
      * Detailed physical tick update.
      */
     void tick(double dt, double altFt, double mach, double oatKelvin, bool fire1, bool fire2);

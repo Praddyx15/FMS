@@ -7,6 +7,8 @@
 #include "AutopilotController.hpp"
 #include "EngineModel.hpp"
 #include "FlightControlLaws.hpp"
+#include "ThrottleQuadrantModel.hpp"
+#include "GroundModel.hpp"
 
 /**
  * AirDataComputer — Flight Simulation Core (QML façade).
@@ -71,12 +73,36 @@ class AirDataComputer : public QObject
     Q_PROPERTY(double speedTrend READ speedTrend NOTIFY dataChanged)
 
     // ── Engine ───────────────────────────────────────────────────────────────
-    Q_PROPERTY(double engine1Thrust READ engine1Thrust NOTIFY dataChanged)
-    Q_PROPERTY(double engine2Thrust READ engine2Thrust NOTIFY dataChanged)
+    Q_PROPERTY(double engine1Thrust READ engine1Thrust WRITE setEngine1Thrust NOTIFY dataChanged)
+    Q_PROPERTY(double engine2Thrust READ engine2Thrust WRITE setEngine2Thrust NOTIFY dataChanged)
     Q_PROPERTY(double n1Left     READ n1Left     NOTIFY dataChanged)
     Q_PROPERTY(double n1Right    READ n1Right    NOTIFY dataChanged)
     Q_PROPERTY(double egtLeft    READ egtLeft    NOTIFY dataChanged)
     Q_PROPERTY(double egtRight   READ egtRight   NOTIFY dataChanged)
+
+    // ── Detailed Engine Parameters for Upper ECAM ────────────────────────────
+    Q_PROPERTY(double n2Left READ n2Left NOTIFY dataChanged)
+    Q_PROPERTY(double n2Right READ n2Right NOTIFY dataChanged)
+    Q_PROPERTY(double ffLeft READ ffLeft NOTIFY dataChanged)
+    Q_PROPERTY(double ffRight READ ffRight NOTIFY dataChanged)
+    Q_PROPERTY(double oilPressureLeft READ oilPressureLeft NOTIFY dataChanged)
+    Q_PROPERTY(double oilPressureRight READ oilPressureRight NOTIFY dataChanged)
+    Q_PROPERTY(double oilTempLeft READ oilTempLeft NOTIFY dataChanged)
+    Q_PROPERTY(double oilTempRight READ oilTempRight NOTIFY dataChanged)
+    Q_PROPERTY(double vibN1Left READ vibN1Left NOTIFY dataChanged)
+    Q_PROPERTY(double vibN1Right READ vibN1Right NOTIFY dataChanged)
+    Q_PROPERTY(double vibN2Left READ vibN2Left NOTIFY dataChanged)
+    Q_PROPERTY(double vibN2Right READ vibN2Right NOTIFY dataChanged)
+
+    // ── Throttle & Ground Model Properties ───────────────────────────────────
+    Q_PROPERTY(double tla1 READ tla1 WRITE setTla1 NOTIFY dataChanged)
+    Q_PROPERTY(double tla2 READ tla2 WRITE setTla2 NOTIFY dataChanged)
+    Q_PROPERTY(double speedbrakeLever READ speedbrakeLever WRITE setSpeedbrakeLever NOTIFY dataChanged)
+    Q_PROPERTY(int flapHandleIndex READ flapHandleIndex WRITE setFlapHandleIndex NOTIFY dataChanged)
+    Q_PROPERTY(bool gearDown READ gearDown WRITE setGearDown NOTIFY dataChanged)
+    Q_PROPERTY(int autobrakeSelector READ autobrakeSelector WRITE setAutobrakeSelector NOTIFY dataChanged)
+    Q_PROPERTY(bool parkingBrake READ parkingBrake WRITE setParkingBrake NOTIFY dataChanged)
+    Q_PROPERTY(bool onGround READ onGround NOTIFY dataChanged)
 
     // ── Autopilot ────────────────────────────────────────────────────────────
     Q_PROPERTY(bool   ap1Active       READ ap1Active  WRITE setAp1Active  NOTIFY autopilotChanged)
@@ -175,6 +201,28 @@ public:
     double n1Right()       const { return m_engines.n1Right; }
     double egtLeft()       const { return m_engines.egtLeft; }
     double egtRight()      const { return m_engines.egtRight; }
+    double n2Left()        const { return m_engines.n2Left; }
+    double n2Right()       const { return m_engines.n2Right; }
+    double ffLeft()        const { return m_engines.ffLeft; }
+    double ffRight()       const { return m_engines.ffRight; }
+    double oilPressureLeft() const { return m_engines.oilPressureLeft; }
+    double oilPressureRight() const { return m_engines.oilPressureRight; }
+    double oilTempLeft()   const { return m_engines.oilTempLeft; }
+    double oilTempRight()  const { return m_engines.oilTempRight; }
+    double vibN1Left()     const { return m_engines.vibN1Left; }
+    double vibN1Right()    const { return m_engines.vibN1Right; }
+    double vibN2Left()     const { return m_engines.vibN2Left; }
+    double vibN2Right()    const { return m_engines.vibN2Right; }
+
+    // Throttle / Flight deck controls / Ground state
+    double tla1()              const { return m_throttle.tla1; }
+    double tla2()              const { return m_throttle.tla2; }
+    double speedbrakeLever()   const { return m_throttle.speedbrakeLever; }
+    int    flapHandleIndex()   const { return m_throttle.flapHandleIndex; }
+    bool   gearDown()          const { return m_throttle.gearDown; }
+    int    autobrakeSelector() const { return m_throttle.autobrakeSelector; }
+    bool   parkingBrake()      const { return m_throttle.parkingBrake; }
+    bool   onGround()          const { return m_ground.onGround; }
 
     // Autopilot (delegates to AutopilotController)
     bool    ap1Active()         const { return m_ap.ap1Active; }
@@ -235,6 +283,16 @@ public:
     void setRudderPedal(double v)    { m_rudderPedal    = v; }
     void setFlapConfig(int v) { m_flapConfig = v; emit dataChanged(); }
 
+    void setEngine1Thrust(double v);
+    void setEngine2Thrust(double v);
+    void setTla1(double v);
+    void setTla2(double v);
+    void setSpeedbrakeLever(double v);
+    void setFlapHandleIndex(int v);
+    void setGearDown(bool v);
+    void setAutobrakeSelector(int v);
+    void setParkingBrake(bool v);
+
     // ── QML Invokables ────────────────────────────────────────────────────────
     Q_INVOKABLE void tick(double dt);
     Q_INVOKABLE void engageAP1();
@@ -286,6 +344,8 @@ private:
     // ── Sub-modules (Phase 1 decomposition) ───────────────────────────────────
     EngineModel         m_engines;
     AutopilotController m_ap;
+    ThrottleQuadrantModel m_throttle;
+    GroundModel         m_ground;
 
     // ── Simulation clock ──────────────────────────────────────────────────────
     double m_simTime = 0.0;

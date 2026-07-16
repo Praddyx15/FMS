@@ -140,94 +140,121 @@ Canvas {
         txt(ctx, 250, 30, cCyan, 18, "BLEED", true);
         txt(ctx, 50, 80, cGreen, 12, "ENG 1", false);
         
-        var eng1Active = FlightDataManager ? FlightDataManager.adirs1Active : true;
-        circle(ctx, 100, 120, 15, eng1Active ? cGreen : cAmber, 2);
-        txt(ctx, 100, 125, eng1Active ? cGreen : cAmber, 11, eng1Active ? "ON" : "OFF", true);
-        line(ctx, 115, 120, 200, 120, eng1Active ? cGreen : cAmber, 3);
+        var eng1Active = root.adc ? (root.adc.n1Left > 15.0) : true;
+        var eng1Bleed = FlightDataManager ? FlightDataManager.engBleed1 : true;
+        circle(ctx, 100, 120, 15, (eng1Active && eng1Bleed) ? cGreen : cAmber, 2);
+        txt(ctx, 100, 125, (eng1Active && eng1Bleed) ? cGreen : cAmber, 11, (eng1Active && eng1Bleed) ? "ON" : "OFF", true);
+        line(ctx, 115, 120, 200, 120, (eng1Active && eng1Bleed) ? cGreen : cAmber, 3);
         
         var apuActive = FlightDataManager ? FlightDataManager.apuActive : false;
-        txt(ctx, 200, 80, apuActive ? cGreen : cCyan, 12, "APU", false);
-        circle(ctx, 220, 120, 15, apuActive ? cGreen : cWhite, 2);
-        txt(ctx, 220, 125, apuActive ? cGreen : cWhite, 11, apuActive ? "ON" : "OFF", true);
+        var apuBleed = FlightDataManager ? FlightDataManager.apuBleed : false;
+        txt(ctx, 200, 80, (apuActive && apuBleed) ? cGreen : cCyan, 12, "APU", false);
+        circle(ctx, 220, 120, 15, (apuActive && apuBleed) ? cGreen : cWhite, 2);
+        txt(ctx, 220, 125, (apuActive && apuBleed) ? cGreen : cWhite, 11, (apuActive && apuBleed) ? "ON" : "OFF", true);
         
         var pack1Active = FlightDataManager ? FlightDataManager.pack1Active : true;
-        txt(ctx, 50, 200, pack1Active ? cGreen : cAmber, 12, "PACK 1", false);
-        strokeRect(ctx, 80, 210, 60, 30, pack1Active ? cGreen : cAmber, 2);
-        txt(ctx, 110, 230, pack1Active ? cGreen : cAmber, 11, pack1Active ? "ON" : "OFF", true);
+        var pack1On = FlightDataManager ? FlightDataManager.pack1On : true;
+        var p1State = pack1Active && pack1On;
+        txt(ctx, 50, 200, p1State ? cGreen : cAmber, 12, "PACK 1", false);
+        strokeRect(ctx, 80, 210, 60, 30, p1State ? cGreen : cAmber, 2);
+        txt(ctx, 110, 230, p1State ? cGreen : cAmber, 11, p1State ? "ON" : "OFF", true);
         
         var pack2Active = FlightDataManager ? FlightDataManager.pack2Active : true;
-        txt(ctx, 350, 200, pack2Active ? cGreen : cAmber, 12, "PACK 2", false);
-        strokeRect(ctx, 360, 210, 60, 30, pack2Active ? cGreen : cAmber, 2);
-        txt(ctx, 390, 230, pack2Active ? cGreen : cAmber, 11, pack2Active ? "ON" : "OFF", true);
+        var pack2On = FlightDataManager ? FlightDataManager.pack2On : true;
+        var p2State = pack2Active && pack2On;
+        txt(ctx, 350, 200, p2State ? cGreen : cAmber, 12, "PACK 2", false);
+        strokeRect(ctx, 360, 210, 60, 30, p2State ? cGreen : cAmber, 2);
+        txt(ctx, 390, 230, p2State ? cGreen : cAmber, 11, p2State ? "ON" : "OFF", true);
         
-        var eng2Active = FlightDataManager ? FlightDataManager.adirs2Active : true;
-        txt(ctx, 400, 80, eng2Active ? cGreen : cAmber, 12, "ENG 2", false);
-        circle(ctx, 400, 120, 15, eng2Active ? cGreen : cAmber, 2);
-        txt(ctx, 400, 125, eng2Active ? cGreen : cAmber, 11, eng2Active ? "ON" : "OFF", true);
+        var eng2Active = root.adc ? (root.adc.n1Right > 15.0) : true;
+        var eng2Bleed = FlightDataManager ? FlightDataManager.engBleed2 : true;
+        txt(ctx, 400, 80, (eng2Active && eng2Bleed) ? cGreen : cAmber, 12, "ENG 2", false);
+        circle(ctx, 400, 120, 15, (eng2Active && eng2Bleed) ? cGreen : cAmber, 2);
+        txt(ctx, 400, 125, (eng2Active && eng2Bleed) ? cGreen : cAmber, 11, (eng2Active && eng2Bleed) ? "ON" : "OFF", true);
     }
 
     function drawPress(ctx) {
+        var cabAlt = FlightDataManager ? Math.round(FlightDataManager.cabinAltitude) : 6850;
+        var cabVsi = FlightDataManager ? Math.round(FlightDataManager.cabinVsi) : -350;
+        var deltaP = FlightDataManager ? FlightDataManager.cabinDeltaP.toFixed(1) : "7.8";
+        var outflowPos = FlightDataManager ? Math.round(FlightDataManager.outflowValvePos * 100) : 45;
+        var ditching = FlightDataManager ? FlightDataManager.ditchingOverride : false;
+
         txt(ctx, 250, 30, cCyan, 18, "PRESS", true);
         txt(ctx, 50, 80, cWhite, 12, "CAB ALT", false);
-        txt(ctx, 150, 80, cGreen, 16, "6850", false);
+        txt(ctx, 150, 80, cabAlt > 8000 ? cAmber : cGreen, 16, cabAlt.toString(), false);
         txt(ctx, 220, 80, cWhite, 11, "FT", false);
         txt(ctx, 50, 120, cWhite, 12, "CAB V/S", false);
-        txt(ctx, 150, 120, cGreen, 16, "-350", false);
+        txt(ctx, 150, 120, Math.abs(cabVsi) > 1000 ? cAmber : cGreen, 16, (cabVsi > 0 ? "+" : "") + cabVsi.toString(), false);
         txt(ctx, 220, 120, cWhite, 11, "FT/MIN", false);
         txt(ctx, 50, 160, cWhite, 12, "DELTA P", false);
-        txt(ctx, 150, 160, cGreen, 16, "7.8", false);
+        txt(ctx, 150, 160, cGreen, 16, deltaP, false);
         txt(ctx, 200, 160, cWhite, 11, "PSI", false);
         txt(ctx, 50, 220, cWhite, 12, "LDG ELEV", false);
         txt(ctx, 150, 220, cCyan, 14, "AUTO", false);
         txt(ctx, 300, 80, cWhite, 12, "OUTFLOW VLV", false);
-        txt(ctx, 400, 80, cGreen, 14, "45%", false);
+        txt(ctx, 400, 80, ditching ? cAmber : cGreen, 14, ditching ? "CLOSED" : outflowPos + "%", false);
+        if (ditching) {
+            txt(ctx, 300, 120, cAmber, 12, "DITCHING ONLY", false);
+        }
     }
 
     function drawElec(ctx) {
         txt(ctx, 250, 30, cCyan, 18, "ELEC", true);
         
         var gen1 = FlightDataManager ? FlightDataManager.gen1Active : true;
+        var gen2 = FlightDataManager ? FlightDataManager.gen2Active : true;
+        var ac1Volts = FlightDataManager ? Math.round(FlightDataManager.acBus1) : 115;
+        var ac2Volts = FlightDataManager ? Math.round(FlightDataManager.acBus2) : 115;
+        var acEssVolts = FlightDataManager ? Math.round(FlightDataManager.acEss) : 115;
+        var bat1Volts = FlightDataManager ? FlightDataManager.bat1Voltage.toFixed(1) : "28.0";
+        var bat2Volts = FlightDataManager ? FlightDataManager.bat2Voltage.toFixed(1) : "28.0";
+
         txt(ctx, 80, 80, gen1 ? cGreen : cAmber, 13, "GEN 1", false);
-        txt(ctx, 70, 110, gen1 ? cWhite : cAmber, 11, gen1 ? "115V" : "0V", false);
+        txt(ctx, 70, 110, gen1 ? cWhite : cAmber, 11, gen1 ? ac1Volts + "V" : "0V", false);
         txt(ctx, 120, 110, gen1 ? cGreen : cAmber, 12, gen1 ? "400Hz" : "0Hz", false);
         
-        var gen2 = FlightDataManager ? FlightDataManager.gen2Active : true;
         txt(ctx, 380, 80, gen2 ? cGreen : cAmber, 13, "GEN 2", false);
-        txt(ctx, 370, 110, gen2 ? cWhite : cAmber, 11, gen2 ? "115V" : "0V", false);
+        txt(ctx, 370, 110, gen2 ? cWhite : cAmber, 11, gen2 ? ac2Volts + "V" : "0V", false);
         txt(ctx, 420, 110, gen2 ? cGreen : cAmber, 12, gen2 ? "400Hz" : "0Hz", false);
         
-        strokeRect(ctx, 180, 150, 140, 40, cGreen, 2);
-        txt(ctx, 250, 175, cGreen, 13, "AC BUS 1", true);
-        strokeRect(ctx, 180, 210, 140, 40, cGreen, 2);
-        txt(ctx, 250, 235, cGreen, 13, "AC BUS 2", true);
+        strokeRect(ctx, 180, 150, 140, 40, ac1Volts > 50 ? cGreen : cAmber, 2);
+        txt(ctx, 250, 175, ac1Volts > 50 ? cGreen : cAmber, 13, "AC BUS 1", true);
+        strokeRect(ctx, 180, 210, 140, 40, ac2Volts > 50 ? cGreen : cAmber, 2);
+        txt(ctx, 250, 235, ac2Volts > 50 ? cGreen : cAmber, 13, "AC BUS 2", true);
         
-        txt(ctx, 50, 300, cGreen, 12, "BAT 1", false);
-        txt(ctx, 50, 320, cGreen, 11, "28V", false);
-        txt(ctx, 400, 300, cGreen, 12, "BAT 2", false);
-        txt(ctx, 400, 320, cGreen, 11, "28V", false);
+        txt(ctx, 50, 300, bat1Volts > 20 ? cGreen : cAmber, 12, "BAT 1", false);
+        txt(ctx, 50, 320, bat1Volts > 20 ? cGreen : cAmber, 11, bat1Volts + "V", false);
+        txt(ctx, 400, 300, bat2Volts > 20 ? cGreen : cAmber, 12, "BAT 2", false);
+        txt(ctx, 400, 320, bat2Volts > 20 ? cGreen : cAmber, 11, bat2Volts + "V", false);
     }
 
     function drawHyd(ctx) {
         txt(ctx, 250, 30, cCyan, 18, "HYD", true);
         
-        var hydG = FlightDataManager ? FlightDataManager.hydraulicGreen : true;
+        var greenPress = FlightDataManager ? Math.round(FlightDataManager.hydraulicGreenPressure) : 3000;
+        var bluePress = FlightDataManager ? Math.round(FlightDataManager.hydraulicBluePressure) : 3000;
+        var yellowPress = FlightDataManager ? Math.round(FlightDataManager.hydraulicYellowPressure) : 3000;
+
+        var hydG = greenPress > 2000;
+        var hydB = bluePress > 2000;
+        var hydY = yellowPress > 2000;
+
         txt(ctx, 80, 80, hydG ? cGreen : cAmber, 14, "GREEN", false);
         txt(ctx, 60, 110, cWhite, 11, "PSI", false);
-        txt(ctx, 100, 110, hydG ? cGreen : cAmber, 13, hydG ? "3000" : "0", false);
+        txt(ctx, 100, 110, hydG ? cGreen : cAmber, 13, greenPress.toString(), false);
         txt(ctx, 60, 135, cWhite, 11, "QTY", false);
         txt(ctx, 100, 135, hydG ? cGreen : cAmber, 13, hydG ? "12.5" : "0.0", false);
         
-        var hydB = FlightDataManager ? FlightDataManager.hydraulicBlue : true;
         txt(ctx, 220, 80, hydB ? cCyan : cAmber, 14, "BLUE", false);
         txt(ctx, 200, 110, cWhite, 11, "PSI", false);
-        txt(ctx, 240, 110, hydB ? cCyan : cAmber, 13, hydB ? "3000" : "0", false);
+        txt(ctx, 240, 110, hydB ? cCyan : cAmber, 13, bluePress.toString(), false);
         txt(ctx, 200, 135, cWhite, 11, "QTY", false);
         txt(ctx, 240, 135, hydB ? cCyan : cAmber, 13, hydB ? "6.0" : "0.0", false);
         
-        var hydY = FlightDataManager ? FlightDataManager.hydraulicYellow : true;
         txt(ctx, 360, 80, hydY ? cGreen : cAmber, 14, "YELLOW", false);
         txt(ctx, 340, 110, cWhite, 11, "PSI", false);
-        txt(ctx, 390, 110, hydY ? cGreen : cAmber, 13, hydY ? "3000" : "0", false);
+        txt(ctx, 390, 110, hydY ? cGreen : cAmber, 13, yellowPress.toString(), false);
         txt(ctx, 340, 135, cWhite, 11, "QTY", false);
         txt(ctx, 390, 135, hydY ? cGreen : cAmber, 13, hydY ? "12.5" : "0.0", false);
         

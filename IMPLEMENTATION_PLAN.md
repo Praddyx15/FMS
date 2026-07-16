@@ -86,14 +86,16 @@ IMPLEMENTATION_PLAN_PHASE2.md (merged here).
 | `EngineModel` detailed internals: per-engine N1/N2 spool (τ 1–4 s), start sequence (starter→fuel at 22% N2→cutoff 55%), EGT w/ thermal lag + start spike, FF, oil, vibration, thrust `T_max·σ^0.7·f(M)·g(N1)`, bleed flow — behind a legacy-compat shim | ✅ done (07-11; shim caveat below) |
 | ADI canvas redraw on resize; test suite at 11 suites incl. SystemsManager cascade test | ✅ done (07-11) |
 | Phase-4 session (07-12, audited 07-13): `NavigationDatabase` (runways/navaids/ILS/holdings/airways), `FlightPlanManager` (3-slot TMPY, constraints, DIR TO), `PerformanceEngine` (VLS/GD/F/S/Vapp per A.1), `PredictionEngine` (climb/descent points), `FMGCController` (7-phase enum); ArincParser parses PA/PG/D/DB/PI/EP/ER → nav DB 15,027 entries; SystemsManager `updateFuel` real (FF burn, tank transfer, pumps, crossfeed — ADC flat burn removed, no double burn); mocked-N1 fixed (hyd/elec read live bus engines); OHP: ADIRS 1/2/3 + APU MST/STR bound, live fuel quantities; ADC publishes full engine state to bus; detailed engine tick w/ real alt/Mach/OAT; 16 test suites green; smoke run warning-free | ✅ verified 07-13 |
+| Phase 2/3 session (07-16, audited same day): real pneumatics (`updatePneumatics`: bleed sources, cross-bleed AUTO/OPEN/OFF, pack-availability gating) + pressurization (`updatePressurization`: cabin alt/VSI/ΔP/outflow/ditching) with full FlightDataManager property surface; ECAM SD BLEED+PRESS pages now live; legacy `EngineModel` shim deleted + test migrated; `ThrottleQuadrantModel`+`GroundModel` added to CMake and ticked from `AirDataComputer` every frame (TLA→thrust, WoW→altitude clamp, autobrake→decel); CG-shift-from-fuel and ADIRS 7-min fast-align confirmed already present (plan corrected). Build/tests/smoke verified GREEN this session (pre-audit snapshot did not link — fixed same session) | ✅ verified 07-16 |
 
 Still true: `FMSComputer` = scratchpad + INIT/F-PLN/PERF/PROG/RAD NAV/DATA LSKs only;
-AP = basic HDG/ALT/VS PID; OHP = 3-toggle stub (NOT wired to SystemsManager despite
-the Antigravity work-log claim — no OverheadPanel.qml diff exists); ECAM SD numeric
-values (PSI/QTY, volts, oil, vib) still constants (only boolean states are live);
-no training framework; no recording. `GroundModel.hpp` / `ThrottleQuadrantModel.hpp`
-exist as UNWIRED skeletons — not in CMakeLists, referenced by nothing; treat as
-starting points for Phase 3, not as done.
+AP = basic HDG/ALT/VS PID; OHP = still only 3 of 12 doc-06 sections (unchanged since
+07-12 — the 07-16 pneumatic/pressurization backend has no OHP UI yet); ECAM SD
+numerics now partially live (elec/hyd/bleed/press) but eng oil/vib and fuel-flow
+still constants; no training framework; no recording. `GroundModel`/
+`ThrottleQuadrantModel` are WIRED into the build and tick loop as of 07-16 (no
+longer orphaned skeletons) but the cockpit UI (ThrottleQuadrant.qml lever/flaps/
+speedbrake) has ZERO connection to them — see §5 discrepancy 7.
 Known cosmetic: `ThrottleQuadrant.qml:56` undefined-bool warning. App cold-start can
 take ~25 s to first window (nav DB load + cold cache) — not a hang.
 
@@ -116,22 +118,50 @@ Remaining (post-audit 07-13):
   power from AC buses, crossfeed; ADC flat burn removed (no double burn).
 - ✅ (07-13) Elec IDG requires engine N2 > 50% (engines-off drops GEN 1/2); APU has
   a real spool model (N ramp ~10 s, EGT peak 650→settle 400 °C, shutdown decay);
-  ADIRS OFF→ALIGN(600 s)→NAV with ATT degradation implemented in `updateADIRS`.
-- 🟡 ADIRS refinements vs doc 05 §1.3: no fast-align (7 min on ground w/ position),
-  no ADR-data-at-90 s stage; ATT mode keys off GNSS loss instead of alignment loss;
-  expose mode/countdown to QML (IRS INIT page + OHP annunciators).
-- 🟡 CG shift from fuel distribution (weight.cg_mac_pct is static).
-- 🟡 Pneumatic (bleeds, X-bleed, packs), pressurization (cabin alt, outflow,
-  ditching), fire protection (loops, squibs, agents).
-- 🔴 ADIRS: OFF→ALIGN(≤600 s)→NAV, ADR at ~90 s, ATT degraded mode (doc 05 §1.2-1.3).
-- 🔴 OverheadPanel.qml: partially wired (07-12: ADIRS 1/2/3, APU MST/STR, GEN 1/2
-  bound to façade; fuel quantities live) — still far from the 12 sections of doc 06
-  §4 (missing: hyd pumps/PTU/RAT, fuel pumps/crossfeed switches, bleed/packs,
-  pressurization, fire, anti-ice, signs, lighting, EXT PWR/BUS TIE).
-- 🔴 ECAM SD pages read live `SystemsManager` numerics: the façade now exposes
-  hyd pressures + AC bus/battery volts and `SystemStatus.qml` shows them live
-  (07-12) — but `ECAMLowerDisplay.qml` (the actual SD canvas: drawHyd/drawElec PSI,
-  QTY, volts, oil, vib) still draws constants; also surface FF/oil/vib from the bus.
+  ADIRS OFF→ALIGN→NAV with ATT degradation implemented in `updateADIRS`.
+- ✅ (07-16, audited/committed) Pneumatics + pressurization are REAL, not stubs:
+  `SystemsManager::updatePneumatics` — eng1/eng2/APU bleed sources, cross-bleed
+  OFF/AUTO/OPEN logic (AUTO opens on APU-bleed-only or asymmetric supply), pack
+  availability gated on manifold pressure >15; `updatePressurization` — cabin
+  altitude target `= clamp(planeAlt·0.2, 0, 8000)` with climb/descent rate limits,
+  cabin VSI, ΔP from ISA pressure delta, outflow valve position, ditching override
+  (closes valve, freezes cabin alt). Full FlightDataManager Q_PROPERTY surface
+  (engBleed1/2, apuBleed, crossBleedMode, pack1On/2On, cabinAltitude/Vsi/DeltaP,
+  outflowValvePos, ditchingOverride, bleedPressure1/2) — getters AND setters both
+  implemented (the 07-16 pre-audit snapshot had declarations only and did not
+  link; fixed same session). ECAM SD BLEED and PRESS pages now read these live
+  (was previously only ELEC/HYD).
+- ✅ (07-16, audited) CG shift from fuel distribution was ALREADY implemented
+  (`SystemsManager::updateFuel`, `cg_mac_pct` shifts with tank quantities) —
+  previously mis-tracked as open in this plan; correcting the record.
+- ✅ (07-16, audited) ADIRS fast-align: alignment time is 420 s (7 min), not the
+  600 s full-align — matches doc 05 §1.3's "known position" fast-align case.
+- 🟢 ADIRS remaining refinement: no distinct ADR-data-at-90s intermediate stage;
+  ATT mode still keys off GNSS loss rather than alignment loss specifically —
+  cosmetic vs current behavior, low priority.
+- FIXED (07-16, this session): ECAM `drawBleed()` referenced
+  `FlightDataManager.eng1Active`/`eng2Active`, which never existed — silently
+  always read `undefined` (falsy), so the ENG1/ENG2 bleed-source indicators always
+  showed OFF regardless of actual engine state. Corrected to `root.adc.n1Left/
+  n1Right > 15.0`, verified build+tests+smoke clean. (ECAMLowerDisplay.qml:143,169)
+- 🟡 Pneumatic/pressurization remaining: fire protection (loops, squibs, agents)
+  still absent; no anti-ice bleed draw modeled.
+- 🔴 OverheadPanel.qml: still only 3 of 12 doc-06 §4 sections (HYD flags, ELEC/APU,
+  NAV/ADIRS) + a read-only fuel readout — UNCHANGED since 07-12 despite the
+  backend now fully supporting hyd pumps/PTU/RAT, fuel pumps/crossfeed, and the
+  entire pneumatic/pressurization panel (07-16 backend work has no OHP UI yet).
+  Missing: HYD pump/PTU/RAT switches, FUEL 6 pumps + X-FEED + MODE SEL, BLEED
+  (engBleed1/2, apuBleed, crossBleedMode) + PACKS (pack1On/2On), PRESS (MODE SEL,
+  LDG ELEV, DITCHING → ditchingOverride), FIRE test buttons, ANTI-ICE, SIGNS,
+  LIGHTING, EXT PWR + BUS TIE. No decorative switches (Target_work hard rule).
+- 🔴 ADIRS mode/countdown NOT exposed to QML anywhere: `adirsMode[]` and
+  `adirsAlignTime[]` exist on the bus but no façade property, no OHP annunciator,
+  no IrsInitPage.qml display of alignment remaining time.
+- 🔴 ECAM SD numerics: drawElec (AC/battery volts) and drawHyd (G/B/Y PSI) are live
+  (07-12/07-16); drawBleed/drawPress now live (07-16, see above). Still constants:
+  drawEng oil/vib (AirDataComputer already exposes oilPressureLeft/Right,
+  oilTempLeft/Right, vibN1/N2Left/Right as Q_PROPERTYs since 07-16 — just not read
+  by the canvas yet), FUEL page flow rates.
 - 🟡 Electrical topology depth per Appendix A.3: EMER GEN/STAT INV sources exist as
   flags only; add TR granularity, ESS SHED buses, battery charge model.
 
@@ -142,22 +172,48 @@ Remaining (post-audit 07-13):
   `tickEngine` (old both-engines fire quirk gone in the detailed path).
 - ✅ (07-12) ADC calls the detailed tick with real alt/Mach/OAT and publishes the
   full engine state (N1/N2/EGT/FF/oil/vib/thrust/started) to the bus.
-- 🔴 Delete the legacy-compat shim overload `tick(dt, fire1, fire2)` (still in
-  EngineModel with its `400 + 5·N1` EGT overwrite and `thrust1/2` mapping — now only
-  tests use it); migrate `testEngineModel` to the detailed tick + TLA inputs, expose
-  N2/FF/oil/vib as Q_PROPERTYs for the upper ECAM, align EGT/idle values with
-  doc 03 §2 limits (1083/1043 °C).
-- 🔴 `ThrottleQuadrantModel` (doc 13 §2.2): a header skeleton EXISTS (detent snap,
-  TLA→thrust map, lever/handle fields) but is NOT in CMakeLists and nothing uses it.
-  Wire into the build + ADC/EngineModel, then add: A/THR engage rules per detent,
-  speed-brake ARMED auto-deploy, flap handle → config + aero effect, gear lever +
-  LGCIU, reverse interlock (ground only); drive ThrottleQuadrant.qml from it.
-- 🔴 `GroundModel`: header skeleton EXISTS (WoW at ≤5 ft, compression flags, autobrake
-  decel targets) but is NOT in CMakeLists and nothing uses it. Wire into the build +
-  physics, then add: real WoW from gear + altitude AGL, μ table (dry/wet/icy),
-  braking force via SystemsManager braking channel, NWS ±75° tiller / ±6° pedal,
-  crosswind on ground.
-- 🟡 Ground spoilers, reverse thrust; 🟢 gear transit animation.
+- ✅ (07-16, audited) Legacy-compat shim `EngineModel::tick(dt, fire1, fire2)` is
+  DELETED (the `400 + 5·N1` EGT overwrite and `thrust1/2`-as-input mapping are
+  gone); `testEngineModel` migrated to `thrustLeverAngle1/2` + detailed-tick
+  inputs and passes. `thrust1/thrust2` fields still exist but are now pure OUTPUT
+  mirrors (`thrust1 = n1Left` set at the end of `tick()`) — harmless, could be
+  renamed/removed later but not blocking.
+- ✅ (07-16, audited) `ThrottleQuadrantModel` and `GroundModel` are now in
+  `Backend/CMakeLists.txt` and owned/ticked by `AirDataComputer` every frame
+  (`m_throttle.tick(dt)`, `m_ground.tick(dt, m_altitude)`); `thrustLeverAngle1/2`
+  on `EngineModel` are driven from `m_throttle.getNormalizedThrust(tla1/2)` (real
+  engine response to TLA); `m_ground.onGround` now clamps altitude to 0 and zeroes
+  negative VSI at touchdown (real physics change, not cosmetic); autobrake
+  selector is wired ADC↔GroundModel; new Q_PROPERTYs exposed: `tla1/tla2`,
+  `speedbrakeLever`, `flapHandleIndex`, `gearDown`, `autobrakeSelector`,
+  `parkingBrake`, `onGround`, plus the upper-ECAM engine detail set (`n2Left/
+  Right`, `ffLeft/Right`, `oilPressureLeft/Right`, `oilTempLeft/Right`,
+  `vibN1/N2Left/Right`). EGT/N1-idle constants NOT yet aligned to doc 03 §2
+  (1083/1043 °C limits) — still open, low priority.
+- 🔴 **CRITICAL GAP — the cockpit throttle lever does nothing.**
+  `ThrottleQuadrant.qml`'s `eng1`/`eng2` (0–100 slider values driving the visual
+  lever) are LOCAL QML properties with ZERO binding to `adc.tla1`/`adc.setTla1()`
+  or any backend property — confirmed by exhaustive grep, no `adc.tla*`/`adc.set*`
+  reference anywhere in the file. Same for `flaps` (never reaches
+  `flapHandleIndex`) and `speedBrake` (never reaches `speedbrakeLever`). All the
+  07-16 backend wiring is inert from the user's perspective until this QML↔C++
+  gap is closed. This is the single highest-value fix remaining in Phase 3.
+- 🔴 `ThrottleQuadrantModel::tick()` is still an empty stub (`// Handle autobrake
+  or speedbrake arm conditions here` — no code). Needed: A/THR engage/disengage
+  rules per detent (CL detent + A/THR active → managed; above CL → manual
+  disconnect), speed-brake ARMED auto-deploy on landing, flap handle → aero
+  effect via `flapConfig`, gear lever + LGCIU state, reverse-thrust interlock
+  (ground only, `getDetent() == REVERSE` requires `onGround`).
+- 🔴 `GroundModel` braking is a flat IAS-decay approximation
+  (`AirDataComputer::updatePhysics` lines ~283-297) that does NOT consult
+  `SystemsManager::getBrakingChannel()` — braking "works" even with hydraulics
+  failed (HYD_GREEN_LEAK etc. have no effect on stopping distance). No μ table
+  (dry/wet/icy — `GroundModel.mu` is a single static 0.8, never looked up by
+  surface condition), no NWS steering effect on heading, no crosswind-on-ground.
+- 🟡 No new unit tests added for `ThrottleQuadrantModel`/`GroundModel` (detent
+  transitions, WoW threshold) despite being requested — test suite count
+  unchanged at 16 across this integration.
+- 🟡 Ground spoilers, reverse thrust physics; 🟢 gear transit animation.
 
 ### Phase 4 — FMS & Navigation (ARINC 702A-conceptual) 🚧 IN PROGRESS
 Engines built + unit-tested 07-12 (see §2): parser covers PA/PG/D/DB/PI/EP/ER;
@@ -271,11 +327,27 @@ spoilers, pitch backup (Ph3/5) · MLS 🟢 (last — rare fitment).
    columns cannot fit in 380. Result: the scaled MCDU overhangs its wrapper by
    ~20·scale px per side. Either restore 420×660 (recommended) or shrink the MCDU
    panel design to 380; decide with design authority.
-5. **Antigravity work-log accuracy** (2026-07-11, reconfirmed 07-13): its claims
-   repeatedly overstate completion (07-11: OHP/ECAM/FMSComputer wiring claimed with
-   no diffs; 07-13: an entire audit "run" produced zero deliverables — no xlsx, no
-   plan update, no commit). Treat all its checklists as aspirational; this plan's
-   §2/§3 status, backed by diffs/builds/tests, is the verified truth.
+5. **Antigravity work-log accuracy** (2026-07-11 → 07-16): mixed record. 07-11/07-13
+   sessions overstated completion (wiring claimed with no diffs; one audit "run"
+   produced zero deliverables). The 07-16 pneumatics/pressurization/Phase-3 session
+   was SUBSTANTIVE and mostly accurate — real models, shim correctly deleted, tests
+   migrated — but shipped a non-linking build (declarations without .cpp bodies)
+   and one silent QML bug (`FlightDataManager.eng1Active` never existed; fixed
+   this session). Continue to verify every claim against diffs + a green build
+   before trusting a status; this plan's §2/§3, backed by that verification, is
+   the truth.
+6. **Uncommitted-work risk is now the top process issue.** As of 2026-07-16, ~600
+   lines of verified, tested, working code (Phase 2 pneumatics/pressurization +
+   Phase 3 shim deletion/TQ/Ground integration) sat uncommitted across two sessions
+   — a crash, revert, or conflicting edit would have destroyed real progress.
+   Standing rule going forward: commit + push as soon as a change is build-clean
+   and test-green, not at the end of a multi-session arc.
+7. **ThrottleQuadrant.qml↔backend disconnect** (found 07-16): the physical cockpit
+   throttle lever, flap lever, and speedbrake handle in QML are pure local UI state
+   with no path to `AirDataComputer`'s `tla1/tla2`, `flapHandleIndex`, or
+   `speedbrakeLever`. All of Phase 3's engine-response wiring is currently
+   unreachable from the actual cockpit UI. See Phase 3 for detail — this is the
+   next session's highest-value fix.
 
 ## 6. KEY REFERENCE POINTERS (full index: Reference_Forensic_Report.md Part 11)
 

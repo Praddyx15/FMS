@@ -2,54 +2,6 @@
 #include <cmath>
 #include <algorithm>
 
-void EngineModel::tick(double dt, bool fire1, bool fire2)
-{
-    // Map legacy thrust inputs to simulated throttle lever angles (0.0 to 1.0)
-    // Legacy tests assume:
-    // - thrust1 = 40.0 translates to target N1 = 84.0 (kN1Idle is 19.5, so 19.5 + 80.5 * tla = 84.0 => tla = 64.5 / 80.5 ≈ 0.80124)
-    // - normal operation is self-sustaining (started = true)
-    // - fire cuts started, decays thrust1 and thrust2, and sets N1/N2 targets accordingly.
-
-    if (fire1) {
-        thrust1 = std::max(0.0, thrust1 - dt * 5.0);
-        started1 = false;
-        fuelValveOpen1 = false;
-        n1Left = thrust1 * 2.0; // Legacy test expectation: n1Left follows thrust1 * 2 under fire
-    } else {
-        started1 = true;
-        fuelValveOpen1 = true;
-        thrustLeverAngle1 = (thrust1 * 2.1 - kN1Idle) / (100.0 - kN1Idle);
-        thrustLeverAngle1 = std::clamp(thrustLeverAngle1, 0.0, 1.0);
-    }
-
-    if (fire2) {
-        thrust2 = std::max(0.0, thrust2 - dt * 5.0);
-        started2 = false;
-        fuelValveOpen2 = false;
-        n1Right = thrust2 * 2.0;
-    } else {
-        started2 = true;
-        fuelValveOpen2 = true;
-        thrustLeverAngle2 = (thrust2 * 2.1 - kN1Idle) / (100.0 - kN1Idle);
-        thrustLeverAngle2 = std::clamp(thrustLeverAngle2, 0.0, 1.0);
-    }
-
-    // Detailed physical tick update
-    tick(dt, 0.0, 0.0, 288.15, fire1, fire2);
-
-    // Overwrite physical N1/EGT states with legacy test expectations if engine is on fire or legacy behavior is expected
-    if (fire1) {
-        n1Left = thrust1 * 2.0;
-    } else {
-        egtLeft = 400.0 + n1Left * 5.0;
-    }
-    if (fire2) {
-        n1Right = thrust2 * 2.0;
-    } else {
-        egtRight = 400.0 + n1Right * 5.0;
-    }
-}
-
 void EngineModel::tick(double dt, double altFt, double mach, double oatKelvin, bool fire1, bool fire2)
 {
     // Update both engines independently
@@ -58,6 +10,9 @@ void EngineModel::tick(double dt, double altFt, double mach, double oatKelvin, b
 
     tickEngine(dt, altFt, mach, oatKelvin, fire2, thrustLeverAngle2, started2, fuelValveOpen2, starterActive2,
                n1Right, n2Right, egtRight, ffRight, oilPressureRight, oilTempRight, vibN1Right, vibN2Right, thrustN2, bleedFlow2);
+
+    thrust1 = n1Left;
+    thrust2 = n1Right;
 }
 
 void EngineModel::tickEngine(double dt, double altFt, double mach, double oatKelvin, bool fire,

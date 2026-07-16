@@ -150,6 +150,14 @@ void AirDataComputer::tick(double dt)
 {
     m_simTime += dt;
 
+    // Tick throttle and ground models
+    m_throttle.tick(dt);
+    m_ground.tick(dt, m_altitude);
+
+    // Set commanded engine inputs based on TLA
+    m_engines.thrustLeverAngle1 = m_throttle.getNormalizedThrust(m_throttle.tla1);
+    m_engines.thrustLeverAngle2 = m_throttle.getNormalizedThrust(m_throttle.tla2);
+
     // ── Engines (EngineModel) ─────────────────────────────────────────────────
     double oatK = isaTemperature(m_altitude);
     m_engines.tick(dt, m_altitude, m_mach, oatK,
@@ -181,6 +189,8 @@ void AirDataComputer::tick(double dt)
         eng.thrustN2 = m_engines.thrustN2;
         eng.started1 = m_engines.started1;
         eng.started2 = m_engines.started2;
+        eng.bleedFlow1 = m_engines.bleedFlow1;
+        eng.bleedFlow2 = m_engines.bleedFlow2;
     }
 
     SystemsManager::instance()->tick(dt);
@@ -270,8 +280,26 @@ void AirDataComputer::updatePhysics(double dt)
     if (!pitotBlocked) {
         double iasTarget = (m_ap.athrActive) ? m_ap.selectedSpeed : m_ias;
         m_prevIas = m_ias;
-        m_ias += (iasTarget - m_ias) * dt * 0.3;
-        m_ias = qBound(80.0, m_ias, 400.0);
+        if (m_ground.onGround) {
+            if (m_throttle.parkingBrake) {
+                m_ias += (0.0 - m_ias) * dt * 0.5;
+            } else if (m_ground.autobrakeDecel > 0.0) {
+                m_ias += (0.0 - m_ias) * dt * 0.2; // deceleration under autobrake
+            } else {
+                // taxi speed model on ground
+                if (m_ap.athrActive) {
+                    m_ias += (iasTarget - m_ias) * dt * 0.3;
+                } else {
+                    double tlaAvg = (m_throttle.getNormalizedThrust(m_throttle.tla1) + m_throttle.getNormalizedThrust(m_throttle.tla2)) / 2.0;
+                    double targetSpeed = tlaAvg * 180.0 + 10.0;
+                    m_ias += (targetSpeed - m_ias) * dt * 0.1;
+                }
+            }
+            m_ias = qBound(0.0, m_ias, 400.0);
+        } else {
+            m_ias += (iasTarget - m_ias) * dt * 0.3;
+            m_ias = qBound(80.0, m_ias, 400.0);
+        }
         m_speedTrend = (m_ias - m_prevIas) / dt; // kt/s raw → scale for arrow
     }
 
@@ -322,8 +350,14 @@ void AirDataComputer::updatePhysics(double dt)
         // Idle drift
         m_vsi += (0.0 - m_vsi) * dt * 0.5;
     }
-    m_altitude += m_vsi * dt / 60.0; // fpm to ft/s
-    m_altitude = qBound(0.0, m_altitude, 45000.0);
+
+    if (m_ground.onGround) {
+        m_altitude = 0.0;
+        if (m_vsi < 0.0) m_vsi = 0.0;
+    } else {
+        m_altitude += m_vsi * dt / 60.0; // fpm to ft/s
+        m_altitude = qBound(0.0, m_altitude, 45000.0);
+    }
 }
 
 void AirDataComputer::updateSpeedProtection()
@@ -420,4 +454,71 @@ void AirDataComputer::setManualAttitude(double pitch, double roll)
     if (m_ap.apEngaged()) return;
     FlightControlLaws::applyManual(pitch, roll, m_pitch, m_roll);
     emit dataChanged();
+}
+
+void AirDataComputer::setEngine1Thrust(double v)
+{
+    setTla1(v);
+}
+
+void AirDataComputer::setEngine2Thrust(double v)
+{
+    setTla2(v);
+}
+
+void AirDataComputer::setTla1(double v)
+{
+    if (m_throttle.tla1 != v) {
+        m_throttle.tla1 = std::clamp(v, -20.0, 45.0);
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setTla2(double v)
+{
+    if (m_throttle.tla2 != v) {
+        m_throttle.tla2 = std::clamp(v, -20.0, 45.0);
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setSpeedbrakeLever(double v)
+{
+    if (m_throttle.speedbrakeLever != v) {
+        m_throttle.speedbrakeLever = std::clamp(v, 0.0, 1.0);
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setFlapHandleIndex(int v)
+{
+    if (m_throttle.flapHandleIndex != v) {
+        m_throttle.flapHandleIndex = std::clamp(v, 0, 4);
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setGearDown(bool v)
+{
+    if (m_throttle.gearDown != v) {
+        m_throttle.gearDown = v;
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setAutobrakeSelector(int v)
+{
+    if (m_throttle.autobrakeSelector != v) {
+        m_throttle.autobrakeSelector = std::clamp(v, 0, 3);
+        m_ground.autobrakeMode = m_throttle.autobrakeSelector;
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setParkingBrake(bool v)
+{
+    if (m_throttle.parkingBrake != v) {
+        m_throttle.parkingBrake = v;
+        emit dataChanged();
+    }
 }

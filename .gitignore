@@ -20,8 +20,8 @@ CMakeUserPresets.json
 compile_commands.json
 .qmlls.ini
 
-# Machine-local Claude Code settings
-.claude/settings.local.json
+# Machine-local Claude Code settings (agents/skills auto-installed per machine)
+.claude/
 
 # Skill/tooling scaffolding (office schemas, caches) - not project code
 scripts/office/

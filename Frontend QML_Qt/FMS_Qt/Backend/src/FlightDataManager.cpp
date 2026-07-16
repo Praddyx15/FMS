@@ -359,6 +359,97 @@ bool FlightDataManager::eng2AntiIce() const
     return bus->systems().antiIce[2];
 }
 
+bool FlightDataManager::engBleed1() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().engBleed1;
+}
+
+bool FlightDataManager::engBleed2() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().engBleed2;
+}
+
+bool FlightDataManager::apuBleed() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().apuBleed;
+}
+
+int FlightDataManager::crossBleedMode() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().crossBleedMode;
+}
+
+bool FlightDataManager::pack1On() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().pack1On;
+}
+
+bool FlightDataManager::pack2On() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().pack2On;
+}
+
+double FlightDataManager::cabinAltitude() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().cabinAltitude;
+}
+
+double FlightDataManager::cabinVsi() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().cabinVsi;
+}
+
+double FlightDataManager::cabinDeltaP() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().cabinDeltaP;
+}
+
+double FlightDataManager::outflowValvePos() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().outflowValvePos;
+}
+
+bool FlightDataManager::ditchingOverride() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().ditchingOverride;
+}
+
+double FlightDataManager::bleedPressure1() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().bleedPressure1;
+}
+
+double FlightDataManager::bleedPressure2() const
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    return bus->systems().bleedPressure2;
+}
+
 int FlightDataManager::fuelLOuter() const
 {
     auto *bus = DataBus::FlightDataBus::instance();
@@ -816,7 +907,7 @@ void FlightDataManager::setAdirs1Active(bool v)
     if (bus->systems().adirsActive[0] != v) {
         bus->systems().adirsActive[0] = v;
         bus->systems().adirsMode[0] = v ? 1 : 0;
-        bus->systems().adirsAlignTime[0] = v ? 600.0 : 0.0;
+        bus->systems().adirsAlignTime[0] = v ? 420.0 : 0.0;
         emit systemsChanged();
     }
 }
@@ -828,7 +919,7 @@ void FlightDataManager::setAdirs2Active(bool v)
     if (bus->systems().adirsActive[1] != v) {
         bus->systems().adirsActive[1] = v;
         bus->systems().adirsMode[1] = v ? 1 : 0;
-        bus->systems().adirsAlignTime[1] = v ? 600.0 : 0.0;
+        bus->systems().adirsAlignTime[1] = v ? 420.0 : 0.0;
         emit systemsChanged();
     }
 }
@@ -840,7 +931,7 @@ void FlightDataManager::setAdirs3Active(bool v)
     if (bus->systems().adirsActive[2] != v) {
         bus->systems().adirsActive[2] = v;
         bus->systems().adirsMode[2] = v ? 1 : 0;
-        bus->systems().adirsAlignTime[2] = v ? 600.0 : 0.0;
+        bus->systems().adirsAlignTime[2] = v ? 420.0 : 0.0;
         emit systemsChanged();
     }
 }
@@ -863,6 +954,82 @@ void FlightDataManager::setPack2Active(bool v)
         bus->systems().packs[1] = v;
         emit systemsChanged();
     }
+}
+
+void FlightDataManager::setEngBleed1(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().engBleed1 != v) {
+        bus->systems().engBleed1 = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::setEngBleed2(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().engBleed2 != v) {
+        bus->systems().engBleed2 = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::setApuBleed(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().apuBleed != v) {
+        bus->systems().apuBleed = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::setCrossBleedMode(int v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().crossBleedMode != v) {
+        bus->systems().crossBleedMode = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::setPack1On(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().pack1On != v) {
+        bus->systems().pack1On = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::setPack2On(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().pack2On != v) {
+        bus->systems().pack2On = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::setDitchingOverride(bool v)
+{
+    auto *bus = DataBus::FlightDataBus::instance();
+    QMutexLocker locker(&bus->mutex);
+    if (bus->systems().ditchingOverride != v) {
+        bus->systems().ditchingOverride = v;
+        emit systemsChanged();
+    }
+}
+
+void FlightDataManager::triggerSystemsUpdate()
+{
+    emit systemsChanged();
+    emit flightDataChanged();
 }
 
 void FlightDataManager::setWingAntiIce(bool v)

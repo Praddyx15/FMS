@@ -32,4 +32,6 @@ private:
     void updateFuel(double dt, DataBus::FlightDataBus *bus);
     void updateAPU(double dt, DataBus::FlightDataBus *bus);
     void updateADIRS(double dt, DataBus::FlightDataBus *bus);
+    void updatePneumatics(double dt, DataBus::FlightDataBus *bus);
+    void updatePressurization(double dt, DataBus::FlightDataBus *bus);
 };

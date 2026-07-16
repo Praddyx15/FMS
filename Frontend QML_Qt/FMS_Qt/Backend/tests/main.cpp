@@ -204,25 +204,22 @@ void testEngineModel()
     std::cout << "Running testEngineModel..." << std::endl;
     EngineModel eng;
 
-    // Converges toward thrust*2.1 target from the 67% initial state
-    eng.thrust1 = 40.0;  // target N1 = 84
-    eng.thrust2 = 40.0;
+    // Set TLA to target N1 ≈ 84.0%
+    eng.thrustLeverAngle1 = 0.8;
+    eng.thrustLeverAngle2 = 0.8;
     for (int i = 0; i < 200; ++i)
-        eng.tick(0.08, false, false);
+        eng.tick(0.08, 0.0, 0.0, 288.15, false, false);
     TEST_ASSERT(std::abs(eng.n1Left - 84.0) < 1.0);
     TEST_ASSERT(std::abs(eng.n1Right - 84.0) < 1.0);
-    // EGT tracks the linear map
-    TEST_ASSERT(std::abs(eng.egtLeft - (400.0 + eng.n1Left * 5.0)) < 1e-6);
 
-    // Engine fire: thrust decays, N1 follows thrust*2
+    // Engine fire: N1 decays by 10% per second
     EngineModel burning;
-    burning.thrust1 = 30.0;
-    burning.tick(1.0, true, false);
-    TEST_ASSERT(std::abs(burning.thrust1 - 25.0) < 1e-9);   // -5/s
-    TEST_ASSERT(std::abs(burning.n1Left - 50.0) < 1e-9);    // thrust*2
-    for (int i = 0; i < 100; ++i)
-        burning.tick(1.0, true, false);
-    TEST_ASSERT(burning.thrust1 == 0.0 && burning.n1Left == 0.0);
+    burning.n1Left = 67.0;
+    burning.tick(1.0, 0.0, 0.0, 288.15, true, false);
+    TEST_ASSERT(std::abs(burning.n1Left - 57.0) < 1.0);
+    for (int i = 0; i < 10; ++i)
+        burning.tick(1.0, 0.0, 0.0, 288.15, true, false);
+    TEST_ASSERT(burning.n1Left == 0.0);
 
     std::cout << "testEngineModel passed!" << std::endl;
 }

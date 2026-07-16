@@ -91,6 +91,22 @@ class FlightDataManager : public QObject
     Q_PROPERTY(int fuelRInner READ fuelRInner WRITE setFuelRInner NOTIFY systemsChanged)
     Q_PROPERTY(int fuelROuter READ fuelROuter WRITE setFuelROuter NOTIFY systemsChanged)
 
+    // Pneumatics & Pressurization
+    Q_PROPERTY(bool engBleed1 READ engBleed1 WRITE setEngBleed1 NOTIFY systemsChanged)
+    Q_PROPERTY(bool engBleed2 READ engBleed2 WRITE setEngBleed2 NOTIFY systemsChanged)
+    Q_PROPERTY(bool apuBleed READ apuBleed WRITE setApuBleed NOTIFY systemsChanged)
+    Q_PROPERTY(int crossBleedMode READ crossBleedMode WRITE setCrossBleedMode NOTIFY systemsChanged)
+    Q_PROPERTY(bool pack1On READ pack1On WRITE setPack1On NOTIFY systemsChanged)
+    Q_PROPERTY(bool pack2On READ pack2On WRITE setPack2On NOTIFY systemsChanged)
+    Q_PROPERTY(double cabinAltitude READ cabinAltitude NOTIFY systemsChanged)
+    Q_PROPERTY(double cabinVsi READ cabinVsi NOTIFY systemsChanged)
+    Q_PROPERTY(double cabinDeltaP READ cabinDeltaP NOTIFY systemsChanged)
+    Q_PROPERTY(double outflowValvePos READ outflowValvePos NOTIFY systemsChanged)
+    Q_PROPERTY(bool ditchingOverride READ ditchingOverride WRITE setDitchingOverride NOTIFY systemsChanged)
+    Q_PROPERTY(double bleedPressure1 READ bleedPressure1 NOTIFY systemsChanged)
+    Q_PROPERTY(double bleedPressure2 READ bleedPressure2 NOTIFY systemsChanged)
+
+
     // ── EFIS ─────────────────────────────────────────────────────────────────
     Q_PROPERTY(int     ndRange     READ ndRange     WRITE setNdRange     NOTIFY efisChanged)
     Q_PROPERTY(QString ndMode      READ ndMode      WRITE setNdMode      NOTIFY efisChanged)
@@ -163,6 +179,22 @@ public:
     int    fuelRInner()      const;
     int    fuelROuter()      const;
 
+    // Bleed / Pressurization Getters
+    bool   engBleed1()       const;
+    bool   engBleed2()       const;
+    bool   apuBleed()        const;
+    int    crossBleedMode()  const;
+    bool   pack1On()         const;
+    bool   pack2On()         const;
+    double cabinAltitude()   const;
+    double cabinVsi()        const;
+    double cabinDeltaP()     const;
+    double outflowValvePos() const;
+    bool   ditchingOverride() const;
+    double bleedPressure1() const;
+    double bleedPressure2() const;
+
+
     // Live systems telemetry getters
     double hydraulicGreenPressure() const;
     double hydraulicYellowPressure() const;
@@ -220,6 +252,16 @@ public:
     void setAdirs3Active(bool v);
     void setPack1Active(bool v);
     void setPack2Active(bool v);
+
+    // Bleed / Pressurization Setters
+    void setEngBleed1(bool v);
+    void setEngBleed2(bool v);
+    void setApuBleed(bool v);
+    void setCrossBleedMode(int v);
+    void setPack1On(bool v);
+    void setPack2On(bool v);
+    void setDitchingOverride(bool v);
+    void triggerSystemsUpdate();
     void setWingAntiIce(bool v);
     void setEng1AntiIce(bool v);
     void setEng2AntiIce(bool v);

@@ -81,6 +81,8 @@ namespace DataBus {
         double thrustN2{0.0};
         bool started1{false};
         bool started2{false};
+        double bleedFlow1{0.0};
+        double bleedFlow2{0.0};
     };
 
     struct AircraftState {
@@ -195,6 +197,21 @@ namespace DataBus {
         double adirsAlignTime[3]{0.0, 0.0, 0.0}; // seconds remaining to align
         bool packs[2]{true, true};
         bool antiIce[3]{false, false, false}; // wing, eng1, eng2
+
+        // Pneumatics & Pressurization
+        bool engBleed1{true};
+        bool engBleed2{true};
+        bool apuBleed{false};
+        int crossBleedMode{1}; // 0 = OFF, 1 = AUTO, 2 = OPEN
+        bool pack1On{true};
+        bool pack2On{true};
+        double cabinAltitude{0.0}; // ft
+        double cabinVsi{0.0}; // ft/min
+        double cabinDeltaP{0.0}; // psi
+        double outflowValvePos{0.0}; // 0 = closed, 1 = open
+        bool ditchingOverride{false};
+        double bleedPressure1{0.0}; // psi
+        double bleedPressure2{0.0}; // psi
     };
 
     struct FailureList {
