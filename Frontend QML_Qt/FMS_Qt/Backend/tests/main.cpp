@@ -13,6 +13,8 @@
 #include "ArincParser.hpp"
 #include "SystemsManager.hpp"
 #include "Core/FlightDataBus.hpp"
+#include "ThrottleQuadrantModel.hpp"
+#include "GroundModel.hpp"
 
 // A simple macro for reporting test results
 #define TEST_ASSERT(cond) \
@@ -424,6 +426,118 @@ void testPredictionEngine()
     std::cout << "testPredictionEngine passed!" << std::endl;
 }
 
+void testThrottleQuadrantModel()
+{
+    std::cout << "Running testThrottleQuadrantModel..." << std::endl;
+    ThrottleQuadrantModel tq;
+
+    // Detent boundaries (IMPLEMENTATION_PLAN Appendix A.1: IDLE 0/CL 25/MCT-FLX 35/TOGA 45 deg)
+    TEST_ASSERT(tq.getDetent(-10.0) == ThrottleQuadrantModel::REVERSE);
+    TEST_ASSERT(tq.getDetent(-5.0)  == ThrottleQuadrantModel::REVERSE);
+    TEST_ASSERT(tq.getDetent(0.0)   == ThrottleQuadrantModel::IDLE);
+    TEST_ASSERT(tq.getDetent(20.0)  == ThrottleQuadrantModel::CL);
+    TEST_ASSERT(tq.getDetent(35.0)  == ThrottleQuadrantModel::MCT_FLX);
+    TEST_ASSERT(tq.getDetent(42.0)  == ThrottleQuadrantModel::TOGA);
+
+    // Normalized thrust: reverse zone always zero forward thrust (no reverse physics yet)
+    TEST_ASSERT(tq.getNormalizedThrust(-10.0) == 0.0);
+    TEST_ASSERT(tq.getNormalizedThrust(0.0)   == 0.0);
+    TEST_ASSERT(std::abs(tq.getNormalizedThrust(45.0) - 1.0) < 1e-9);
+
+    // Speedbrake auto-deploy on touchdown (armed + ground transition)
+    ThrottleQuadrantModel sb;
+    sb.speedbrakeArmed = true;
+    sb.tick(0.08, false, false); // airborne — establishes prevOnGround=false
+    TEST_ASSERT(sb.speedbrakeLever == 0.0);
+    sb.tick(0.08, true, false);  // touchdown — rising edge
+    TEST_ASSERT(sb.speedbrakeLever == 1.0);
+
+    // Speedbrake auto-retract on go-around (airborne again)
+    sb.tick(0.08, false, false);
+    TEST_ASSERT(sb.speedbrakeLever == 0.0);
+
+    // Speedbrake does NOT auto-deploy on touchdown if not armed
+    ThrottleQuadrantModel sbUnarmed;
+    sbUnarmed.tick(0.08, false, false);
+    sbUnarmed.tick(0.08, true, false);
+    TEST_ASSERT(sbUnarmed.speedbrakeLever == 0.0);
+
+    // A/THR manual-override arbitration: only overridden above CL detent
+    ThrottleQuadrantModel athr;
+    athr.tla1 = 20.0; // CL
+    athr.tick(0.08, false, true);
+    TEST_ASSERT(athr.athrManualOverrideActive == false);
+    athr.tla1 = 35.0; // MCT/FLX — above CL
+    athr.tick(0.08, false, true);
+    TEST_ASSERT(athr.athrManualOverrideActive == true);
+    athr.tick(0.08, false, false); // A/THR not requested — no override flag
+    TEST_ASSERT(athr.athrManualOverrideActive == false);
+
+    // Reverse-thrust ground interlock
+    ThrottleQuadrantModel rev;
+    rev.tla1 = -10.0; // REVERSE zone
+    rev.tick(0.08, false, false); // airborne — interlock trips
+    TEST_ASSERT(rev.reverseInterlockTripped == true);
+    rev.tick(0.08, true, false); // on ground — reverse permitted
+    TEST_ASSERT(rev.reverseInterlockTripped == false);
+
+    std::cout << "testThrottleQuadrantModel passed!" << std::endl;
+}
+
+void testGroundModel()
+{
+    std::cout << "Running testGroundModel..." << std::endl;
+
+    // Weight-on-wheels threshold
+    GroundModel wow;
+    wow.tick(0.08, 10.0, 1.0, 0.0);
+    TEST_ASSERT(wow.onGround == false);
+    wow.tick(0.08, 3.0, 1.0, 0.0);
+    TEST_ASSERT(wow.onGround == true);
+
+    // Runway-condition friction table (Architecture doc 03 §5)
+    GroundModel mu;
+    mu.runwayCondition = GroundModel::DRY;
+    mu.tick(0.08, 0.0, 1.0, 0.0);
+    TEST_ASSERT(std::abs(mu.mu - 0.5) < 1e-9);
+    mu.runwayCondition = GroundModel::WET;
+    mu.tick(0.08, 0.0, 1.0, 0.0);
+    TEST_ASSERT(std::abs(mu.mu - 0.3) < 1e-9);
+    mu.runwayCondition = GroundModel::ICY;
+    mu.tick(0.08, 0.0, 1.0, 0.0);
+    TEST_ASSERT(std::abs(mu.mu - 0.1) < 1e-9);
+
+    // Effective autobrake decel: MAX (6.0 m/s^2 dry-calibrated) scales with
+    // runway mu and the hydraulic braking-channel multiplier
+    GroundModel brk;
+    brk.autobrakeMode = 3; // MAX
+    brk.runwayCondition = GroundModel::DRY;
+    brk.tick(0.08, 0.0, 1.0, 0.0); // full hydraulics, dry runway
+    TEST_ASSERT(std::abs(brk.effectiveAutobrakeDecel - 6.0) < 1e-6);
+
+    brk.tick(0.08, 0.0, 0.0, 0.0); // hydraulic channel NONE — no braking at all
+    TEST_ASSERT(brk.effectiveAutobrakeDecel == 0.0);
+
+    brk.runwayCondition = GroundModel::ICY; // mu=0.1 vs dry 0.5 -> 20% effectiveness
+    brk.tick(0.08, 0.0, 1.0, 0.0);
+    TEST_ASSERT(std::abs(brk.effectiveAutobrakeDecel - 1.2) < 1e-6);
+
+    // Nosewheel steering from rudder pedal input (±6°, on ground only)
+    GroundModel nws;
+    nws.tick(0.08, 0.0, 1.0, 1.0); // full right pedal, on ground
+    TEST_ASSERT(std::abs(nws.rudderSteerAngle - 6.0) < 1e-9);
+    TEST_ASSERT(std::abs(nws.headingRateDegPerSec - 3.0) < 1e-9); // clamped
+
+    nws.tick(0.08, 0.0, 1.0, 0.5);
+    TEST_ASSERT(std::abs(nws.rudderSteerAngle - 3.0) < 1e-9);
+
+    nws.tick(0.08, 10.0, 1.0, 1.0); // airborne — no steering effect
+    TEST_ASSERT(nws.rudderSteerAngle == 0.0);
+    TEST_ASSERT(nws.headingRateDegPerSec == 0.0);
+
+    std::cout << "testGroundModel passed!" << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -444,6 +558,8 @@ int main(int argc, char *argv[])
     testFMGCController();
     testPerformanceEngine();
     testPredictionEngine();
+    testThrottleQuadrantModel();
+    testGroundModel();
     std::cout << "========== ALL TESTS PASSED SUCCESSFULLY ==========" << std::endl;
     return 0;
 }

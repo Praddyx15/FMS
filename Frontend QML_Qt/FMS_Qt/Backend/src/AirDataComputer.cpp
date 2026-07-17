@@ -150,9 +150,27 @@ void AirDataComputer::tick(double dt)
 {
     m_simTime += dt;
 
-    // Tick throttle and ground models
-    m_throttle.tick(dt);
-    m_ground.tick(dt, m_altitude);
+    // Tick throttle model (speedbrake auto-deploy, A/THR arbitration, reverse interlock)
+    m_throttle.tick(dt, m_ground.onGround, m_ap.athrActive);
+    m_flapConfig = m_throttle.flapHandleIndex; // flap handle drives aero config
+
+    // Braking-channel bridge: SystemsManager owns hydraulic pressure state,
+    // GroundModel stays decoupled from it — translate channel -> a multiplier.
+    m_brakingChannel = SystemsManager::instance()->getBrakingChannel();
+    double hydBrakingMultiplier = 1.0;
+    if (m_brakingChannel == "ALTERNATE")      hydBrakingMultiplier = 0.7; // no antiskid
+    else if (m_brakingChannel == "ACCUMULATOR") hydBrakingMultiplier = 0.4; // limited applications
+    else if (m_brakingChannel == "NONE")        hydBrakingMultiplier = 0.0; // no hydraulic braking
+
+    // Drain the brake accumulator once per braking application (Appendix A.4:
+    // -200 psi/application), not continuously — rising-edge detection.
+    bool brakingActiveNow = (m_throttle.autobrakeSelector != 0) || m_throttle.parkingBrake;
+    if (brakingActiveNow && !m_wasBraking && m_brakingChannel == "ACCUMULATOR") {
+        SystemsManager::instance()->applyBrakes();
+    }
+    m_wasBraking = brakingActiveNow;
+
+    m_ground.tick(dt, m_altitude, hydBrakingMultiplier, m_rudderPedal);
 
     // Set commanded engine inputs based on TLA
     m_engines.thrustLeverAngle1 = m_throttle.getNormalizedThrust(m_throttle.tla1);
@@ -263,16 +281,22 @@ void AirDataComputer::updatePhysics(double dt)
     }
 
     // Heading drift/autopilot steering
-    double hdgTarget = m_heading;
-    if (m_ap.headingMode == "MANAGED") {
-        hdgTarget = m_ap.selectedHeading;
-    } else if (m_ap.lateralMode == "HDG" || m_ap.headingMode == "SELECTED") {
-        hdgTarget = m_ap.selectedHeading;
+    if (m_ground.onGround && !m_ap.apEngaged()) {
+        // Manual ground taxi: nosewheel steering from rudder pedal input
+        // (GroundModel::headingRateDegPerSec), not the AP heading-hold logic.
+        m_heading += m_ground.headingRateDegPerSec * dt;
+    } else {
+        double hdgTarget = m_heading;
+        if (m_ap.headingMode == "MANAGED") {
+            hdgTarget = m_ap.selectedHeading;
+        } else if (m_ap.lateralMode == "HDG" || m_ap.headingMode == "SELECTED") {
+            hdgTarget = m_ap.selectedHeading;
+        }
+        double diff = hdgTarget - m_heading;
+        while (diff >  180.0) diff -= 360.0;
+        while (diff < -180.0) diff += 360.0;
+        m_heading += diff * dt * 0.5;
     }
-    double diff = hdgTarget - m_heading;
-    while (diff >  180.0) diff -= 360.0;
-    while (diff < -180.0) diff += 360.0;
-    m_heading += diff * dt * 0.5;
     if (m_heading < 0)   m_heading += 360.0;
     if (m_heading > 360) m_heading -= 360.0;
 
@@ -283,8 +307,19 @@ void AirDataComputer::updatePhysics(double dt)
         if (m_ground.onGround) {
             if (m_throttle.parkingBrake) {
                 m_ias += (0.0 - m_ias) * dt * 0.5;
+            } else if (m_ground.effectiveAutobrakeDecel > 0.0) {
+                // Decel rate scales with the mu- and hydraulic-channel-scaled
+                // target (LO/MED/MAX differ; a degraded/failed braking channel
+                // or a wet/icy runway measurably lengthens the stop).
+                double decayRate = qBound(0.05, m_ground.effectiveAutobrakeDecel / 6.0 * 0.4, 0.4);
+                m_ias += (0.0 - m_ias) * dt * decayRate;
             } else if (m_ground.autobrakeDecel > 0.0) {
-                m_ias += (0.0 - m_ias) * dt * 0.2; // deceleration under autobrake
+                // Autobrake selected but the hydraulic braking channel is NONE
+                // (all systems failed) — selecting a mode does not stop the
+                // aircraft; fall through to the taxi/thrust model below.
+                double tlaAvg = (m_throttle.getNormalizedThrust(m_throttle.tla1) + m_throttle.getNormalizedThrust(m_throttle.tla2)) / 2.0;
+                double targetSpeed = tlaAvg * 180.0 + 10.0;
+                m_ias += (targetSpeed - m_ias) * dt * 0.1;
             } else {
                 // taxi speed model on ground
                 if (m_ap.athrActive) {
@@ -362,8 +397,11 @@ void AirDataComputer::updatePhysics(double dt)
 
 void AirDataComputer::updateSpeedProtection()
 {
-    // Dynamic VLS based on altitude/phase (simplified)
-    double flapFactor = 1.0;
+    // Dynamic VLS based on altitude/phase and flap handle (config 0..4).
+    // Illustrative factors (documented as data, not FCOM-exact): more flap
+    // extension lowers VLS. Real A320 flap 0=clean, 1=slats, 2/3=flap+slat, FULL.
+    static constexpr double kFlapFactor[5] = { 1.00, 0.95, 0.85, 0.78, 0.68 };
+    double flapFactor = kFlapFactor[qBound(0, m_flapConfig, 4)];
     m_vLs        = 195.0 * flapFactor + (m_altitude / 10000.0) * 8.0;
     m_vAlphaProt = m_vLs - 10.0;
     m_vAlphaMax  = m_vAlphaProt - 15.0;
@@ -490,6 +528,14 @@ void AirDataComputer::setSpeedbrakeLever(double v)
     }
 }
 
+void AirDataComputer::setSpeedbrakeArmed(bool v)
+{
+    if (m_throttle.speedbrakeArmed != v) {
+        m_throttle.speedbrakeArmed = v;
+        emit dataChanged();
+    }
+}
+
 void AirDataComputer::setFlapHandleIndex(int v)
 {
     if (m_throttle.flapHandleIndex != v) {
@@ -519,6 +565,14 @@ void AirDataComputer::setParkingBrake(bool v)
 {
     if (m_throttle.parkingBrake != v) {
         m_throttle.parkingBrake = v;
+        emit dataChanged();
+    }
+}
+
+void AirDataComputer::setRunwayCondition(int v)
+{
+    if (m_ground.runwayCondition != v) {
+        m_ground.runwayCondition = std::clamp(v, 0, 2);
         emit dataChanged();
     }
 }

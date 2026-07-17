@@ -98,11 +98,16 @@ class AirDataComputer : public QObject
     Q_PROPERTY(double tla1 READ tla1 WRITE setTla1 NOTIFY dataChanged)
     Q_PROPERTY(double tla2 READ tla2 WRITE setTla2 NOTIFY dataChanged)
     Q_PROPERTY(double speedbrakeLever READ speedbrakeLever WRITE setSpeedbrakeLever NOTIFY dataChanged)
+    Q_PROPERTY(bool speedbrakeArmed READ speedbrakeArmed WRITE setSpeedbrakeArmed NOTIFY dataChanged)
     Q_PROPERTY(int flapHandleIndex READ flapHandleIndex WRITE setFlapHandleIndex NOTIFY dataChanged)
     Q_PROPERTY(bool gearDown READ gearDown WRITE setGearDown NOTIFY dataChanged)
     Q_PROPERTY(int autobrakeSelector READ autobrakeSelector WRITE setAutobrakeSelector NOTIFY dataChanged)
     Q_PROPERTY(bool parkingBrake READ parkingBrake WRITE setParkingBrake NOTIFY dataChanged)
     Q_PROPERTY(bool onGround READ onGround NOTIFY dataChanged)
+    Q_PROPERTY(int runwayCondition READ runwayCondition WRITE setRunwayCondition NOTIFY dataChanged)
+    Q_PROPERTY(bool athrManualOverrideActive READ athrManualOverrideActive NOTIFY dataChanged)
+    Q_PROPERTY(bool reverseInterlockTripped READ reverseInterlockTripped NOTIFY dataChanged)
+    Q_PROPERTY(QString brakingChannel READ brakingChannel NOTIFY dataChanged)
 
     // ── Autopilot ────────────────────────────────────────────────────────────
     Q_PROPERTY(bool   ap1Active       READ ap1Active  WRITE setAp1Active  NOTIFY autopilotChanged)
@@ -218,11 +223,16 @@ public:
     double tla1()              const { return m_throttle.tla1; }
     double tla2()              const { return m_throttle.tla2; }
     double speedbrakeLever()   const { return m_throttle.speedbrakeLever; }
+    bool   speedbrakeArmed()   const { return m_throttle.speedbrakeArmed; }
     int    flapHandleIndex()   const { return m_throttle.flapHandleIndex; }
     bool   gearDown()          const { return m_throttle.gearDown; }
     int    autobrakeSelector() const { return m_throttle.autobrakeSelector; }
     bool   parkingBrake()      const { return m_throttle.parkingBrake; }
     bool   onGround()          const { return m_ground.onGround; }
+    int    runwayCondition()   const { return m_ground.runwayCondition; }
+    bool   athrManualOverrideActive() const { return m_throttle.athrManualOverrideActive; }
+    bool   reverseInterlockTripped()  const { return m_throttle.reverseInterlockTripped; }
+    QString brakingChannel()   const { return m_brakingChannel; }
 
     // Autopilot (delegates to AutopilotController)
     bool    ap1Active()         const { return m_ap.ap1Active; }
@@ -288,10 +298,12 @@ public:
     void setTla1(double v);
     void setTla2(double v);
     void setSpeedbrakeLever(double v);
+    void setSpeedbrakeArmed(bool v);
     void setFlapHandleIndex(int v);
     void setGearDown(bool v);
     void setAutobrakeSelector(int v);
     void setParkingBrake(bool v);
+    void setRunwayCondition(int v);
 
     // ── QML Invokables ────────────────────────────────────────────────────────
     Q_INVOKABLE void tick(double dt);
@@ -397,6 +409,10 @@ private:
     double m_sidestickRoll  = 0.0; // -1..+1  (+ = right roll)
     double m_rudderPedal    = 0.0; // -1..+1
     int    m_flapConfig     = 0;   // 0=clean, 1..4=F1/2/3/FULL
+
+    // ── Ground braking (SystemsManager::getBrakingChannel bridged in) ────────
+    QString m_brakingChannel = "NORMAL";
+    bool    m_wasBraking     = false; // rising-edge detector for accumulator drain
 
     QStringList m_activeFailures;
 };

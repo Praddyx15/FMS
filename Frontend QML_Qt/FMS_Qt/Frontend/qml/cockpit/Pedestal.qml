@@ -30,7 +30,13 @@ Rectangle {
                 Repeater {
                     model: ["ENG 1", "ENG 2"]
                     ColumnLayout {
+                        id: leverDelegate
                         spacing: 4
+                        // Backing value for the lever position (TLA, deg, 0..45 = IDLE..TOGA).
+                        // NOT bound live to adc.tla1/2: that property changes 12.5x/sec from
+                        // the sim tick, which would fight the user's mouse drag every frame.
+                        property real tla: 0
+
                         Text { text: modelData; color: "#546e7a"; font.pixelSize: 8; font.family: "Consolas"; Layout.alignment: Qt.AlignHCenter }
 
                         // Throttle label markers
@@ -45,16 +51,22 @@ Rectangle {
                             }
                         }
 
-                        // Throttle slider
+                        // Throttle slider — domain is TLA degrees (0=IDLE..45=TOGA),
+                        // matching ThrottleQuadrantModel's forward range.
                         Slider {
                             id: throttleSlider
                             orientation: Qt.Vertical
-                            from: 0; to: 100
-                            value: (index === 0 && root.adc) ? root.adc.engine1Thrust :
-                                   (index === 1 && root.adc) ? root.adc.engine2Thrust : 30
+                            from: 0; to: 45
+                            value: leverDelegate.tla
 
                             Layout.preferredHeight: 180
                             Layout.preferredWidth: 36
+
+                            Component.onCompleted: {
+                                if (root.adc) {
+                                    leverDelegate.tla = (index === 0) ? root.adc.tla1 : root.adc.tla2
+                                }
+                            }
 
                             background: Rectangle {
                                 x: throttleSlider.leftPadding + throttleSlider.availableWidth / 2 - width / 2
@@ -67,10 +79,10 @@ Rectangle {
                                     width: parent.width; height: throttleSlider.position * parent.height
                                     radius: 4
                                     color: {
-                                        var v = throttleSlider.value
-                                        if (v >= 90) return Theme.red
-                                        if (v >= 70) return Theme.amber
-                                        if (v >= 50) return Theme.green
+                                        var pct = throttleSlider.value / 45.0 * 100.0
+                                        if (pct >= 90) return Theme.red
+                                        if (pct >= 70) return Theme.amber
+                                        if (pct >= 50) return Theme.green
                                         return Theme.cyan
                                     }
                                 }
@@ -81,14 +93,15 @@ Rectangle {
                                 width: 36; height: 16; radius: 4
                                 color: "#2a2d35"; border.color: Theme.mutedFg; border.width: 1
                                 Text {
-                                    anchors.centerIn: parent; text: Math.round(throttleSlider.value) + "%"
+                                    anchors.centerIn: parent; text: Math.round(throttleSlider.value / 45.0 * 100.0) + "%"
                                     color: Theme.white; font.pixelSize: 8; font.family: "Consolas"
                                 }
                             }
                             onValueChanged: {
+                                leverDelegate.tla = value
                                 if (root.adc) {
-                                    if (index === 0) root.adc.engine1Thrust = value
-                                    else             root.adc.engine2Thrust = value
+                                    if (index === 0) root.adc.tla1 = value
+                                    else             root.adc.tla2 = value
                                 }
                             }
                         }
@@ -130,15 +143,28 @@ Rectangle {
 
         // ── Speedbrake + Parking Brake ────────────────────────────────────
         ColumnLayout {
+            id: controlsCol
             Layout.fillHeight: true; spacing: 8; Layout.preferredWidth: 100
+            // Local backing value, same reasoning as the throttle sliders above:
+            // avoid live-binding a Slider to a property that changes via NOTIFY
+            // dataChanged on every sim tick (redundant onValueChanged churn).
+            property real speedbrakeDeg: 0
 
             Text { text: "CONTROLS"; color: "#78909c"; font.pixelSize: 9; font.family: "Consolas"; font.bold: true }
 
             // Speedbrake
             Text { text: "SPEED BRAKE"; color: "#546e7a"; font.pixelSize: 8; font.family: "Consolas" }
             Slider {
-                from: 0; to: 40; value: 0
+                id: speedbrakeSlider
+                from: 0; to: 40; value: controlsCol.speedbrakeDeg
                 Layout.preferredWidth: 80
+                Component.onCompleted: {
+                    if (root.adc) controlsCol.speedbrakeDeg = root.adc.speedbrakeLever * 40.0
+                }
+                onValueChanged: {
+                    controlsCol.speedbrakeDeg = value
+                    if (root.adc) root.adc.speedbrakeLever = value / 40.0
+                }
                 background: Rectangle { width: parent.availableWidth; height: 8; radius: 4; color: "#1a1d24"; border.color: "#37474f"
                     Rectangle { width: parent.parent.visualPosition * parent.width; height: 8; radius: 4; color: Theme.amber } }
                 handle: Rectangle { width: 16; height: 16; radius: 3; color: "#37474f"; border.color: Theme.mutedFg
@@ -147,19 +173,19 @@ Rectangle {
             }
 
             // Parking brake
-            property bool parkBrake: false
             Text { text: "PARK BRAKE"; color: "#546e7a"; font.pixelSize: 8; font.family: "Consolas" }
             Rectangle {
                 width: 60; height: 26; radius: 4
-                color: parent.parkBrake ? Qt.rgba(1,0.1,0.1,0.3) : "#1a1d24"
-                border.color: parent.parkBrake ? Theme.red : "#37474f"
+                property bool set: root.adc ? root.adc.parkingBrake : false
+                color: set ? Qt.rgba(1,0.1,0.1,0.3) : "#1a1d24"
+                border.color: set ? Theme.red : "#37474f"
                 Text {
                     anchors.centerIn: parent
-                    text: parent.parent.parkBrake ? "SET" : "OFF"
-                    color: parent.parent.parkBrake ? Theme.red : "#78909c"
+                    text: parent.set ? "SET" : "OFF"
+                    color: parent.set ? Theme.red : "#78909c"
                     font.pixelSize: 10; font.bold: true; font.family: "Consolas"
                 }
-                MouseArea { anchors.fill: parent; onClicked: parent.parent.parkBrake = !parent.parent.parkBrake }
+                MouseArea { anchors.fill: parent; onClicked: if (root.adc) root.adc.parkingBrake = !root.adc.parkingBrake }
             }
         }
     }

@@ -87,17 +87,18 @@ IMPLEMENTATION_PLAN_PHASE2.md (merged here).
 | ADI canvas redraw on resize; test suite at 11 suites incl. SystemsManager cascade test | ✅ done (07-11) |
 | Phase-4 session (07-12, audited 07-13): `NavigationDatabase` (runways/navaids/ILS/holdings/airways), `FlightPlanManager` (3-slot TMPY, constraints, DIR TO), `PerformanceEngine` (VLS/GD/F/S/Vapp per A.1), `PredictionEngine` (climb/descent points), `FMGCController` (7-phase enum); ArincParser parses PA/PG/D/DB/PI/EP/ER → nav DB 15,027 entries; SystemsManager `updateFuel` real (FF burn, tank transfer, pumps, crossfeed — ADC flat burn removed, no double burn); mocked-N1 fixed (hyd/elec read live bus engines); OHP: ADIRS 1/2/3 + APU MST/STR bound, live fuel quantities; ADC publishes full engine state to bus; detailed engine tick w/ real alt/Mach/OAT; 16 test suites green; smoke run warning-free | ✅ verified 07-13 |
 | Phase 2/3 session (07-16, audited same day): real pneumatics (`updatePneumatics`: bleed sources, cross-bleed AUTO/OPEN/OFF, pack-availability gating) + pressurization (`updatePressurization`: cabin alt/VSI/ΔP/outflow/ditching) with full FlightDataManager property surface; ECAM SD BLEED+PRESS pages now live; legacy `EngineModel` shim deleted + test migrated; `ThrottleQuadrantModel`+`GroundModel` added to CMake and ticked from `AirDataComputer` every frame (TLA→thrust, WoW→altitude clamp, autobrake→decel); CG-shift-from-fuel and ADIRS 7-min fast-align confirmed already present (plan corrected). Build/tests/smoke verified GREEN this session (pre-audit snapshot did not link — fixed same session) | ✅ verified 07-16 |
+| Phase 3 continuation (07-16, same day, this session): closed the throttle-lever↔backend gap in both `ThrottleQuadrant.qml` and `Pedestal.qml` (the latter had a worse read/write domain-mismatch bug that made manual drag nearly unusable — fixed); implemented `ThrottleQuadrantModel::tick()` (speedbrake arm/auto-deploy/retract, A/THR detent arbitration, reverse interlock) and flap→VLS aero effect; wired `GroundModel` braking through `SystemsManager::getBrakingChannel()` with a μ (runway condition) table and rudder-pedal-driven NWS steering output; added `testThrottleQuadrantModel`+`testGroundModel` (18 suites total). Build/tests/smoke verified GREEN | ✅ verified 07-16 |
 
 Still true: `FMSComputer` = scratchpad + INIT/F-PLN/PERF/PROG/RAD NAV/DATA LSKs only;
 AP = basic HDG/ALT/VS PID; OHP = still only 3 of 12 doc-06 sections (unchanged since
 07-12 — the 07-16 pneumatic/pressurization backend has no OHP UI yet); ECAM SD
 numerics now partially live (elec/hyd/bleed/press) but eng oil/vib and fuel-flow
 still constants; no training framework; no recording. `GroundModel`/
-`ThrottleQuadrantModel` are WIRED into the build and tick loop as of 07-16 (no
-longer orphaned skeletons) but the cockpit UI (ThrottleQuadrant.qml lever/flaps/
-speedbrake) has ZERO connection to them — see §5 discrepancy 7.
-Known cosmetic: `ThrottleQuadrant.qml:56` undefined-bool warning. App cold-start can
-take ~25 s to first window (nav DB load + cold cache) — not a hang.
+`ThrottleQuadrantModel` are wired into the build, the tick loop, AND both cockpit
+UIs (ThrottleQuadrant.qml, Pedestal.qml) as of the 07-16 continuation — the
+throttle-lever gap from §5 discrepancy 7 is closed; `RudderPedals.qml` has the
+same class of gap now (backend NWS consumer exists, UI doesn't feed it).
+App cold-start can take ~25 s to first window (nav DB load + cold cache) — not a hang.
 
 ## 3. EXECUTION PHASES (from doc 11, + doc 13 additions, + Appendix A bindings)
 
@@ -190,30 +191,60 @@ Remaining (post-audit 07-13):
   Right`, `ffLeft/Right`, `oilPressureLeft/Right`, `oilTempLeft/Right`,
   `vibN1/N2Left/Right`). EGT/N1-idle constants NOT yet aligned to doc 03 §2
   (1083/1043 °C limits) — still open, low priority.
-- 🔴 **CRITICAL GAP — the cockpit throttle lever does nothing.**
-  `ThrottleQuadrant.qml`'s `eng1`/`eng2` (0–100 slider values driving the visual
-  lever) are LOCAL QML properties with ZERO binding to `adc.tla1`/`adc.setTla1()`
-  or any backend property — confirmed by exhaustive grep, no `adc.tla*`/`adc.set*`
-  reference anywhere in the file. Same for `flaps` (never reaches
-  `flapHandleIndex`) and `speedBrake` (never reaches `speedbrakeLever`). All the
-  07-16 backend wiring is inert from the user's perspective until this QML↔C++
-  gap is closed. This is the single highest-value fix remaining in Phase 3.
-- 🔴 `ThrottleQuadrantModel::tick()` is still an empty stub (`// Handle autobrake
-  or speedbrake arm conditions here` — no code). Needed: A/THR engage/disengage
-  rules per detent (CL detent + A/THR active → managed; above CL → manual
-  disconnect), speed-brake ARMED auto-deploy on landing, flap handle → aero
-  effect via `flapConfig`, gear lever + LGCIU state, reverse-thrust interlock
-  (ground only, `getDetent() == REVERSE` requires `onGround`).
-- 🔴 `GroundModel` braking is a flat IAS-decay approximation
-  (`AirDataComputer::updatePhysics` lines ~283-297) that does NOT consult
-  `SystemsManager::getBrakingChannel()` — braking "works" even with hydraulics
-  failed (HYD_GREEN_LEAK etc. have no effect on stopping distance). No μ table
-  (dry/wet/icy — `GroundModel.mu` is a single static 0.8, never looked up by
-  surface condition), no NWS steering effect on heading, no crosswind-on-ground.
-- 🟡 No new unit tests added for `ThrottleQuadrantModel`/`GroundModel` (detent
-  transitions, WoW threshold) despite being requested — test suite count
-  unchanged at 16 across this integration.
-- 🟡 Ground spoilers, reverse thrust physics; 🟢 gear transit animation.
+- ✅ (07-16 continuation, this session) **Cockpit throttle lever gap CLOSED.**
+  `ThrottleQuadrant.qml` levers/flaps/speedbrake now write `adc.tla1/tla2`
+  (0–100% slider mapped linearly to 0–45° TLA, top=TOGA),
+  `adc.flapHandleIndex`, `adc.speedbrakeLever`; added the missing
+  `speedbrakeArmed` Q_PROPERTY (existed on `ThrottleQuadrantModel` but was never
+  exposed — nothing could ever arm the speedbrake) plus an ARM toggle button.
+  Also fixed a second, worse bug found while wiring `Pedestal.qml`: its throttle
+  slider live-bound `value:` to `adc.engine1Thrust`, whose GETTER returns
+  simulated N1 (0–105ish, changing every 80 ms tick) while its WRITE path set
+  TLA (clamped -20..45) — a read/write domain mismatch that made manual drag
+  nearly non-functional (the live binding snapped the handle back every physics
+  tick). Fixed by binding the slider to a local backing value written only via
+  `Component.onCompleted` (from `adc.tla1/2`) and the slider's own
+  `onValueChanged` — same safe one-way pattern used in `ThrottleQuadrant.qml`.
+  `Pedestal.qml`'s speedbrake slider and parking-brake toggle (previously fully
+  local/inert) now write `adc.speedbrakeLever`/`adc.parkingBrake` the same way.
+- ✅ (07-16 continuation) `ThrottleQuadrantModel::tick()` implemented: speedbrake
+  ARMED auto-deploy on touchdown (WoW rising edge → lever=1.0) and auto-retract
+  on go-around (falling edge → lever=0.0); A/THR detent arbitration
+  (`athrManualOverrideActive` — true when A/THR requested but a lever sits above
+  CL); reverse-thrust ground interlock (`reverseInterlockTripped` when in the
+  REVERSE zone while airborne). Flap handle now has a real aero effect: VLS
+  scales by a per-config factor (1.00/0.95/0.85/0.78/0.68) in
+  `updateSpeedProtection` — was previously a hardcoded `flapFactor = 1.0` no-op.
+- ✅ (07-16 continuation) `GroundModel` braking now consults
+  `SystemsManager::getBrakingChannel()` via a multiplier AirDataComputer bridges
+  in each tick (NORMAL=1.0, ALTERNATE=0.7 no-antiskid, ACCUMULATOR=0.4,
+  NONE=0.0 — hydraulic failures now measurably degrade or remove stopping
+  performance); accumulator drains −200 psi per braking-application rising edge
+  (Appendix A.4), not continuously. Added a real μ table (`runwayCondition`
+  DRY/WET/ICY = 0.5/0.3/0.1 per Architecture doc 03 §5, exposed as
+  `adc.runwayCondition`) that scales `effectiveAutobrakeDecel` alongside the
+  hydraulic multiplier; LO/MED/MAX now genuinely differ in stopping performance
+  (previously a flat `dt*0.2` decay regardless of mode). Added nosewheel
+  steering from rudder-pedal input (±6°, `adc.rudderPedal` already existed but
+  had no consumer) producing a real heading-rate effect while taxiing — dormant
+  until `RudderPedals.qml` is wired (still 🟡 open, tracked below), but correct
+  and tested at the model level.
+- ✅ (07-16 continuation) Two new gtest suites: `testThrottleQuadrantModel`
+  (detent boundaries, normalized-thrust reverse-zone clamp, speedbrake
+  arm/deploy/retract, A/THR override arbitration, reverse interlock) and
+  `testGroundModel` (WoW threshold, mu table, effective-decel scaling under
+  hydraulic-channel and surface-condition combinations, NWS steering output) —
+  suite count now 18, all green; full build clean; warning-free smoke run.
+- 🟡 Still open: `RudderPedals.qml` has zero backend binding (same class of gap
+  the throttle lever had) — NWS effect above is correct but unexercised until
+  it's wired; tiller-based ±75° ground steering has no UI at all; crosswind
+  drift-on-ground not modeled; no gear lever UI exists anywhere (`gearDown`
+  defaults true, unconsumed by physics); reverse-thrust PHYSICS (negative
+  thrust in `EngineModel`) not implemented — the interlock flag is correct and
+  tested but nothing produces reverse thrust yet even on the ground.
+- 🟡 EGT/N1-idle constants still not aligned to doc 03 §2 (1083/1043 °C limits).
+- 🟡 Ground spoilers (aero drag from `speedbrakeLever`), reverse thrust physics;
+  🟢 gear transit animation.
 
 ### Phase 4 — FMS & Navigation (ARINC 702A-conceptual) 🚧 IN PROGRESS
 Engines built + unit-tested 07-12 (see §2): parser covers PA/PG/D/DB/PI/EP/ER;
@@ -342,12 +373,28 @@ spoilers, pitch backup (Ph3/5) · MLS 🟢 (last — rare fitment).
    — a crash, revert, or conflicting edit would have destroyed real progress.
    Standing rule going forward: commit + push as soon as a change is build-clean
    and test-green, not at the end of a multi-session arc.
-7. **ThrottleQuadrant.qml↔backend disconnect** (found 07-16): the physical cockpit
-   throttle lever, flap lever, and speedbrake handle in QML are pure local UI state
-   with no path to `AirDataComputer`'s `tla1/tla2`, `flapHandleIndex`, or
-   `speedbrakeLever`. All of Phase 3's engine-response wiring is currently
-   unreachable from the actual cockpit UI. See Phase 3 for detail — this is the
-   next session's highest-value fix.
+7. **ThrottleQuadrant.qml↔backend disconnect — RESOLVED (07-16, same-day
+   continuation).** Both `ThrottleQuadrant.qml` and `Pedestal.qml` now write
+   `tla1/tla2`, `flapHandleIndex`, `speedbrakeLever` (+ the newly-exposed
+   `speedbrakeArmed`, `parkingBrake`). A second, more serious bug was found and
+   fixed while closing this: `Pedestal.qml`'s throttle slider live-bound its
+   `value:` to `adc.engine1Thrust`, whose getter returns simulated N1 (changing
+   every physics tick) while its write path set TLA — a read/write domain
+   mismatch that made manual dragging nearly non-functional. See Phase 3 for
+   the full fix record and remaining gaps (RudderPedals.qml has the equivalent
+   gap now; reverse-thrust physics still unimplemented).
+8. **Live UI verification limits**: this session could not drive the running
+   `FmsTrainer.exe` via computer-use (the custom exe has no Start-Menu/installed-
+   app registration, which the available automation tooling requires for its
+   allowlist). Verification instead relied on: 18/18 passing unit tests that
+   exercise the exact new logic, a warning-free smoke run with
+   `QT_FORCE_STDERR_LOGGING=1` (a bad `var`-typed QML property reference — like
+   discrepancy 5's `eng1Active` bug — reliably surfaces here since
+   `ThrottleQuadrant.qml` is always-instantiated, not behind a view-switch
+   Loader), and manual trace of the data-flow chain. `Pedestal.qml`'s bindings
+   are behind a Loader (view index 5) and were verified by code review only, not
+   a live warning-free run — flag for a follow-up session with GUI access to
+   confirm interactively.
 
 ## 6. KEY REFERENCE POINTERS (full index: Reference_Forensic_Report.md Part 11)
 
