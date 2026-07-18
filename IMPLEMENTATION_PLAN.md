@@ -100,6 +100,50 @@ throttle-lever gap from §5 discrepancy 7 is closed; `RudderPedals.qml` has the
 same class of gap now (backend NWS consumer exists, UI doesn't feed it).
 App cold-start can take ~25 s to first window (nav DB load + cold cache) — not a hang.
 
+## 2A. RECOMMENDED NEXT 3 SESSIONS (evidence-based, 2026-07-17 planning pass)
+
+Produced from a fresh three-agent codebase audit (not the prior plan text) —
+see the individual phase entries in §3 for full file:line evidence. Each
+session is scoped to be independently startable in a new context: read this
+block + the cited phase bullets, no other setup needed. Every session ends
+with the standard gate from §1.4 (build clean, all tests pass, warning-free
+smoke run) before commit+push.
+
+**Session A — Display/UI wiring cleanup** (small, safe, zero backend risk;
+everything needed already exists and is proven live elsewhere in the app):
+1. `RudderPedals.qml` → `adc.rudderPedal` (Phase 3 bullet; copy the
+   `Pedestal.qml`/`ThrottleQuadrant.qml` pattern).
+2. `ECAM.qml` upper E/WD: replace hardcoded N2/FF/oil/vib/fuel/electrical/
+   pneumatic literals with the live `adc`/`FlightDataManager` properties
+   (Phase 10 bullet — full list of exact hardcoded values there).
+3. `OverheadPanel.qml`: add the 4 backend-ready sections — BLEED, PACKS,
+   PRESSURIZATION (ditching), ANTI-ICE (Phase 2 bullet).
+Rationale: these three are the same bug class (real backend, unwired UI) found
+and fixed for the throttle lever on 07-16/07-17 — closing them now prevents
+the "looks done, isn't" trap from compounding further, and each is provably
+low-risk because the data already flows correctly elsewhere in the same app.
+
+**Session B — Failure-system unification** (correctness fix, do BEFORE any
+failure-catalogue expansion): see Phase 7 §"CRITICAL DEFECT FOUND". Unify the
+three disconnected failure-ID lists around one canonical scheme, repoint
+`InstructorEngine`'s 16-ID catalogue, and prove it with an integration test
+(inject → `SystemsManager::tick()` → real bus-state change), not another
+isolated unit test. This is a correctness bug in an already-shipped-looking
+feature (the Instructor Station UI calls real methods and looks functional),
+not new-feature work — treat it as higher priority than catalogue growth.
+
+**Session C — Phase 4 FMS integration** (the largest remaining strategic gap,
+reconfirmed unchanged on 07-17): wire the five engines to `FMSComputer`/MCDU
+per the existing Phase 4 plan below. Register `NavigationDatabase` to QML
+first (currently the only one of the five not exposed at all). This is a
+multi-session effort in its own right — Session C is the START of it, not a
+single sitting.
+
+Do NOT start Phase 5 (Autopilot/FBW modes), Phase 6 (Training Framework), or
+Phase 8 (Instructor scenarios beyond the Session B fix) before Session C —
+they all depend on Phase 4's real flight-plan/performance data to be
+meaningful rather than cosmetic.
+
 ## 3. EXECUTION PHASES (from doc 11, + doc 13 additions, + Appendix A bindings)
 
 Priorities: 🔴 P0 blocking · 🟡 P1 important · 🟢 P2 stretch.
@@ -147,14 +191,20 @@ Remaining (post-audit 07-13):
   n1Right > 15.0`, verified build+tests+smoke clean. (ECAMLowerDisplay.qml:143,169)
 - 🟡 Pneumatic/pressurization remaining: fire protection (loops, squibs, agents)
   still absent; no anti-ice bleed draw modeled.
-- 🔴 OverheadPanel.qml: still only 3 of 12 doc-06 §4 sections (HYD flags, ELEC/APU,
-  NAV/ADIRS) + a read-only fuel readout — UNCHANGED since 07-12 despite the
-  backend now fully supporting hyd pumps/PTU/RAT, fuel pumps/crossfeed, and the
-  entire pneumatic/pressurization panel (07-16 backend work has no OHP UI yet).
-  Missing: HYD pump/PTU/RAT switches, FUEL 6 pumps + X-FEED + MODE SEL, BLEED
-  (engBleed1/2, apuBleed, crossBleedMode) + PACKS (pack1On/2On), PRESS (MODE SEL,
-  LDG ELEV, DITCHING → ditchingOverride), FIRE test buttons, ANTI-ICE, SIGNS,
-  LIGHTING, EXT PWR + BUS TIE. No decorative switches (Target_work hard rule).
+- 🔴 OverheadPanel.qml: CONFIRMED still 3 of 12 doc-06 §4 sections (HYD flags —
+  genuinely toggle-writable via the generic `FlightDataManager[modelData.prop]
+  = !...` pattern, not cosmetic; ELEC/APU; NAV/ADIRS as plain booleans, not the
+  doc's OFF/STBY/NAV tri-state) + a read-only fuel readout. Audited 07-17,
+  split by what's actually needed:
+  - 🔴 BACKEND-READY, UI-ONLY (do first — no new C++ needed): BLEED
+    (`engBleed1/2`, `apuBleed`, `crossBleedMode` all have setters), PACKS
+    (`pack1On/2On`), PRESSURIZATION (`ditchingOverride`; MODE SEL/LDG ELEV can
+    stay display-only against `cabinAltitude` etc.), ANTI-ICE (`wingAntiIce`,
+    `eng1AntiIce`, `eng2AntiIce` — confirmed to exist but unwired anywhere).
+  - 🔴 NEEDS NEW BACKEND WORK FIRST: FIRE Protection (no properties exist at
+    all), SIGNS, LIGHTING, per-pump HYD (G/B/Y eng+elec, PTU AUTO/OFF, RAT) and
+    FUEL (6 pumps + X-FEED + MODE SEL) switches, EXT PWR + BUS TIE.
+  No decorative switches (Target_work hard rule).
 - 🔴 ADIRS mode/countdown NOT exposed to QML anywhere: `adirsMode[]` and
   `adirsAlignTime[]` exist on the bus but no façade property, no OHP annunciator,
   no IrsInitPage.qml display of alignment remaining time.
@@ -235,9 +285,15 @@ Remaining (post-audit 07-13):
   `testGroundModel` (WoW threshold, mu table, effective-decel scaling under
   hydraulic-channel and surface-condition combinations, NWS steering output) —
   suite count now 18, all green; full build clean; warning-free smoke run.
-- 🟡 Still open: `RudderPedals.qml` has zero backend binding (same class of gap
-  the throttle lever had) — NWS effect above is correct but unexercised until
-  it's wired; tiller-based ±75° ground steering has no UI at all; crosswind
+- 🔴 (audited 07-17, elevated priority) `RudderPedals.qml` CONFIRMED zero backend
+  binding — `property var adc` declared but the string `adc.` never appears
+  again in the file; `leftPedal`/`rightPedal` are pure local state. Fix is a
+  direct copy of the already-proven `Pedestal.qml`/`ThrottleQuadrant.qml`
+  pattern (write `adc.rudderPedal` from the pedal's `onMoved`, no
+  `Component.onCompleted` init needed since pedals self-center to 0). Small,
+  safe, zero backend risk — activates the already-correct, already-tested
+  `GroundModel` NWS steering that is currently 100% dead weight. Also still
+  open: tiller-based ±75° ground steering has no UI at all; crosswind
   drift-on-ground not modeled; no gear lever UI exists anywhere (`gearDown`
   defaults true, unconsumed by physics); reverse-thrust PHYSICS (negative
   thrust in `EngineModel`) not implemented — the interlock flag is correct and
@@ -251,18 +307,34 @@ Engines built + unit-tested 07-12 (see §2): parser covers PA/PG/D/DB/PI/EP/ER;
 `NavigationDatabase` queries runways/navaids/ILS/holdings/airways; `FlightPlanManager`
 3-slot TMPY with constraints/overfly/discontinuity/DIR TO; `PerformanceEngine`
 VLS/GD/F/S + Vapp per A.1; `PredictionEngine` climb/descent points.
-**Audit 07-13: all five engines are DARK CODE — registered in main.cpp and unit-
-tested, but `FMSComputer` and QML never call them.** Remaining, priority order:
+**Audit 07-13, RECONFIRMED 07-17 (unchanged — verified fresh, not assumed):
+all five engines are DARK CODE.** `FMGCController` has zero references outside
+its own file/tests/registration; `FMSComputer.cpp` references none of the five
+(PROG/RAD NAV LSK handlers are literal stubs, e.g. `// Future: set VOR/ILS
+frequencies`); all 7 checked MCDU pages bind only `fmsComputer`/`adc`/
+`FlightDataManager`; `updatePhysics()` LNAV still reads `FlightDataManager::
+waypoints()`, zero `FlightPlanManager` references. New nuance found 07-17:
+**`NavigationDatabase` isn't even QML-registered in `main.cpp`** (unlike the
+other four, which ARE `qmlRegisterSingletonType`'d) — it's reachable only
+internally from `ArincParser`, making it the darkest of the five. Also
+confirmed: `AutopilotController.cpp`'s ad-hoc phase heuristic carries the
+self-documenting comment `// Phase 4 replaces with FMGC 7-phase` — i.e. the
+prior session already flagged its own retirement condition; it hasn't been met.
+Remaining, priority order:
 - 🔴 INTEGRATION (the Phase-4 gate): wire MCDU pages to the engines —
   INIT/F-PLN edits → `FlightPlanManager` TMPY flow (yellow TMPY rules), PERF →
   `PerformanceEngine`, PROG/FUEL PRED → `PredictionEngine`, RAD NAV →
-  `NavigationDatabase`; drive LNAV sequencing from `FlightPlanManager` legs
-  (replacing the FlightDataManager waypoint path in `updatePhysics`).
+  `NavigationDatabase` (register it to QML first); drive LNAV sequencing from
+  `FlightPlanManager` legs (replacing the FlightDataManager waypoint path in
+  `updatePhysics`).
 - 🔴 Wire `FMGCController` into the sim loop (never ticked today) AND fix its
   transitions to Appendix A.1: use the unused `n1` param (PREFLIGHT→TAKEOFF on
   N1≥85% & GS≥90 kt), cruise capture instead of hardcoded 28,000 ft, dist≤200 nm
   OR altSel↓ for DESCENT, decel point for APPROACH, accel alt for GA→CLIMB; then
   retire the duplicate phase heuristics in `AutopilotController::update`.
+- 🟡 Test coverage for these five is isolation-only (construct-and-call directly
+  via `::instance()`) — no test exercises the real `FMSComputer`/`AirDataComputer`
+  integration path. Add integration tests alongside the wiring work, not after.
 - 🔴 SID/STAR/approach procedures: PD/PE/PF NOT parsed; `NavigationDatabase` has no
   procedure storage — add legs (IF/TF/CF/DF), `sidsFor/starsFor/approachesFor`,
   DEPARTURE/ARRIVAL selection → leg splice with discontinuities.
@@ -292,17 +364,55 @@ tested, but `FMSComputer` and QML never call them.** Remaining, priority order:
   LOC/GS ±0.5 dot, TD VSI ≤600 fpm, 1000-ft stabilized gate.
 - 🟢 Replay 0.25–8×; Modes 1/2/11.
 
-### Phase 7 — Failure Engine
+### Phase 7 — Failure Engine 🔴 CRITICAL DEFECT FOUND (07-17) — fix before extending
+**The instructor-facing failure system is functionally broken for most of its
+own catalogue, in a way that looks correct from the UI.** Three separate,
+disconnected failure-ID lists exist:
+1. `InstructorEngine::s_catalogue` (`InstructorEngine.cpp:6-23`) — 16 IDs, e.g.
+   `HYDRAULIC_GREEN_FAILURE`, `GEN1_FAILURE`, `TCAS_FAILURE`. `injectFailure`/
+   `clearFailure` just add/remove from this list — no cascade call.
+2. `AirDataComputer::m_activeFailures`, populated via `Main.qml`'s
+   `InstructorEngine.failureInjected → adc.applyFailure(id, active)` wiring —
+   but `AirDataComputer` only ever CONSUMES 3 of the 16 IDs
+   (`ENGINE_FIRE_1/2`, `PITOT_BLOCKAGE`). The other 13 land here and do nothing.
+3. `FlightDataBus::training().activeFailures` (`Core/FlightDataBus.hpp:217-229`)
+   — a THIRD, differently-named list (`HYD_GREEN_LEAK`, `GEN_1_FAULT` style).
+   `SystemsManager.cpp` (lines 135-137, 187-188) DOES contain real, correct
+   cascade logic reading from this list (pressure decay, bus loss) — but
+   **nothing in production code ever writes to it**; the only writer anywhere
+   in the codebase is `tests/main.cpp:295`, which pushes directly for a unit
+   test. The IDs don't even match list 1's naming scheme.
+Net effect: injecting `HYDRAULIC_GREEN_FAILURE`/`GEN1_FAILURE`/etc. from the
+Instructor Station UI today has **zero physical effect** on the aircraft —
+only engine fire and pitot blockage (3/16 IDs) do anything. This is worse than
+"no cascade logic exists" (which is what the plan previously implied) — the
+cascade logic is real and correct, it's simply unreachable from the UI.
+- 🔴 **FIX FIRST (before any catalogue expansion):** unify around ONE ID list.
+  Recommended: adopt the `FlightDataBus::training().activeFailures` naming
+  scheme (since `SystemsManager`'s real cascade logic already keys off it) as
+  canonical; repoint `InstructorEngine::s_catalogue` IDs to match it; change
+  the `Main.qml` wiring (or add a new path) so `injectFailure`/`clearFailure`
+  write into the bus list, not (only) `AirDataComputer::m_activeFailures`.
+  Gate: an INTEGRATION test (not unit-in-isolation) proving
+  `instructor.injectFailure("HYD_GREEN_LEAK")` → `SystemsManager::tick()` →
+  `bus->systems().hyd.greenPressure` actually decays. Repeat for at least one
+  ID per current cascade branch in `SystemsManager.cpp`.
 - 🔴 `FailureEngine` (replaces InstructorEngine's flat list): progressions
   IMMEDIATE/PROGRESSIVE/INTERMITTENT/LATENT; triggers MANUAL/SCHEDULED/CONDITIONAL/
   RANDOM; cascades computed through `SystemsManager` (ENG1 flameout → GEN1 → Hyd G
   decay → Pack 1 → yaw, doc 08 §3).
-- 🔴 Catalogue: the **58 IDs of Appendix A.2** (47 fail.xml + 11 electrical.nas) PLUS
-  doc-13 §2.1 additions: gear (door unsafe, asymmetric, gravity ext, LGCIU1, NWS,
-  retract fail), fire (FWD/AFT cargo, lav, avionics), comms (VHF1/2, ACARS, SELCAL,
-  HF1) → **~73 total**, stored as data.
+- 🔴 Catalogue: currently 16 real IDs exist (see above) vs the **58 IDs of
+  Appendix A.2** (47 fail.xml + 11 electrical.nas) PLUS doc-13 §2.1 additions:
+  gear (door unsafe, asymmetric, gravity ext, LGCIU1, NWS, retract fail), fire
+  (FWD/AFT cargo, lav, avionics), comms (VHF1/2, ACARS, SELCAL, HF1) →
+  **~73 total target**, stored as data. Expand only AFTER the unification fix
+  above — adding more IDs to a disconnected system compounds the defect.
 - 🔴 FWC/ECAM integration: QRH-worded caution/warning lines, master caution/warning,
-  SD auto page-call, memo/status, memory-item flag.
+  SD auto page-call, memo/status, memory-item flag. (Note: `ECAM.qml` currently
+  has NO master-caution/master-warning display and NO message list at all —
+  confirmed by repo-wide grep, zero hits for `masterCaution|masterWarning|
+  ecamMessage`; the "memo line" is a static `"ALL SYSTEMS NORMAL"` string on a
+  10 s timer, driven by nothing. This needs building, not just wiring.)
 - 🟢 Random per-flight-hour + conditional triggers.
 
 ### Phase 8 — Instructor Station & Analytics
@@ -320,9 +430,28 @@ No Supabase/WebSocket implementation. Keep bus message-shaped for future 4 Hz sy
 ### Phase 10 — Display Fidelity (continuous; trails backend phases)
 - 🔴 PFD 5-column FMA colors/armed (w/ Ph5); speed-tape bands VLS/αprot/αmax/VMO/VFE +
   V-bugs from live `PerformanceEngine` (w/ Ph4).
+- 🔴 (audited 07-17) `ECAM.qml` (upper E/WD) — real component, PARTIALLY wired,
+  and a pure-plumbing fix (zero backend risk, everything it needs already
+  exists and is proven live elsewhere in the app): N1/EGT are live
+  (`adc.n1Left/n1Right`, `egtLeft/egtRight`); N2/FF/oilP/oilT/vib are hardcoded
+  literals (e.g. `n2: 94.5`, `ff: 1240`, `oilP: 38`) despite `adc.n2Left/Right`,
+  `ffLeft/Right`, `oilPressureLeft/Right`, `vibN1/N2Left/Right` existing as
+  live Q_PROPERTYs since 07-16; FUEL block is hardcoded ("5420 KG") despite
+  `FlightDataManager.fuelLOuter` etc. being live in `OverheadPanel.qml` in this
+  same app; ELECTRICAL/PNEUMATIC status rows are hardcoded "ON"/"AUTO" despite
+  `gen1Active/gen2Active`/`engBleed1/2`/`apuBleed` already existing and already
+  used correctly in `OverheadPanel.qml`. Only HYDRAULIC reads live state. See
+  Phase 7 for the master-caution/warning + message-list gap (needs new logic,
+  not just wiring).
 - 🟡 Cyan alt target, metric alt, radio altimeter <2500 ft (needs Ph3 AGL), ND CSTR +
-  ARPT overlays, TOC/TOD pseudo-waypoints, ILS readout; ECAM upper E/WD (w/ Ph2/3/7).
-- 🟢 Canvas → QQuickPaintedItem 30 Hz migration (per §1.1); fix ThrottleQuadrant warning.
+  ARPT overlays, TOC/TOD pseudo-waypoints, ILS readout.
+- 🟡 (found 07-17) `EFISControl.qml` WXR gain/tilt +/- buttons and an NDB-overlay
+  toggle reference `wxrGain`/`wxrTilt`/`ndbOverlay` — none of these exist on
+  `FlightDataManager` (confirmed zero matches). Unlike most gaps in this plan,
+  this is backend-absent, not silently-broken: needs new Q_PROPERTYs + a
+  parametric WXR model tie-in before the UI can be wired. Low priority (radar
+  tilt/gain is a minor fidelity detail, not a core training function).
+- 🟢 Canvas → QQuickPaintedItem 30 Hz migration (per §1.1).
 
 ### Cross-phase additions from doc 13 (schedule with the phase noted)
 ADF receivers + ND pointers (Ph4/5) · GNSS position solution + RAIM/RNP + nav-mode
@@ -395,6 +524,16 @@ spoilers, pitch backup (Ph3/5) · MLS 🟢 (last — rare fitment).
    are behind a Loader (view index 5) and were verified by code review only, not
    a live warning-free run — flag for a follow-up session with GUI access to
    confirm interactively.
+9. **Failure-ID canonical naming scheme** (found 07-17, see Phase 7): three
+   disconnected ID lists exist today (`InstructorEngine`'s catalogue-style
+   `HYDRAULIC_GREEN_FAILURE`; `FlightDataBus`'s cascade-driving `HYD_GREEN_LEAK`
+   style; Appendix A.2's fail.xml-derived IDs for the eventual 58/73-item
+   catalogue, a third convention again). This plan recommends adopting the
+   `FlightDataBus` scheme as canonical since `SystemsManager`'s real cascade
+   logic already keys off it — but confirm against Appendix A.2 before Session
+   B locks it in, since the eventual full catalogue must match doc 08/Appendix
+   A.2 IDs for QRH-wording traceability. Whichever is chosen, do it ONCE:
+   changing ID strings after the catalogue grows to 58+ entries is expensive.
 
 ## 6. KEY REFERENCE POINTERS (full index: Reference_Forensic_Report.md Part 11)
 
